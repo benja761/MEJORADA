@@ -3,6 +3,7 @@ local Library = {}
 local TweenService = game:GetService("TweenService")
 local UIS = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local Player = Players.LocalPlayer
 
@@ -16,7 +17,7 @@ local Theme = {
 function Library:CreateWindow(Name)
 
 	local GUI = Instance.new("ScreenGui")
-	GUI.Name = "BenjaHub"
+	GUI.Name = "TonyMontanaHub"
 	GUI.Parent = game.CoreGui
 
 	local Main = Instance.new("Frame")
@@ -48,40 +49,69 @@ function Library:CreateWindow(Name)
 	Stroke.Thickness = 1.5
 	Stroke.Parent = Main
 
-	local Glow = Instance.new("ImageLabel")
-	Glow.Name = "Glow"
-	Glow.Parent = Main
-	Glow.BackgroundTransparency = 1
-	Glow.Position = UDim2.new(0,-40,0,-40)
-	Glow.Size = UDim2.new(1,80,1,80)
-	Glow.ZIndex = 0
-	Glow.Image = "rbxassetid://5028857084"
-	Glow.ImageColor3 = Theme.Accent
-	Glow.ImageTransparency = 0.7
-	Glow.ScaleType = Enum.ScaleType.Slice
-	Glow.SliceCenter = Rect.new(24,24,276,276)
+	local TopBar = Instance.new("Frame")
+	TopBar.Size = UDim2.new(1,0,0,40)
+	TopBar.BackgroundTransparency = 1
+	TopBar.Parent = Main
 
-	task.spawn(function()
-		while true do
+	local Title = Instance.new("TextLabel")
+	Title.Size = UDim2.new(1,0,1,0)
+	Title.BackgroundTransparency = 1
+	Title.Text = Name
+	Title.Font = Enum.Font.GothamBold
+	Title.TextSize = 18
+	Title.TextColor3 = Theme.Text
+	Title.Parent = TopBar
+local Library = {}
 
-			TweenService:Create(
-				Glow,
-				TweenInfo.new(2,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),
-				{ImageTransparency = 0.5}
-			):Play()
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
-			task.wait(2)
+local Player = Players.LocalPlayer
 
-			TweenService:Create(
-				Glow,
-				TweenInfo.new(2,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),
-				{ImageTransparency = 0.7}
-			):Play()
+local Theme = {
+	Main = Color3.fromRGB(18,18,18),
+	Panel = Color3.fromRGB(25,25,25),
+	Accent = Color3.fromRGB(170,85,255),
+	Text = Color3.fromRGB(255,255,255)
+}
 
-			task.wait(2)
+function Library:CreateWindow(Name)
 
-		end
-	end)
+	local GUI = Instance.new("ScreenGui")
+	GUI.Name = "TonyMontanaHub"
+	GUI.Parent = game.CoreGui
+
+	local Main = Instance.new("Frame")
+	Main.Size = UDim2.new(0,0,0,0)
+	Main.Position = UDim2.new(0.5,-350,0.5,-210)
+	Main.BackgroundColor3 = Theme.Main
+	Main.Parent = GUI
+
+	TweenService:Create(
+		Main,
+		TweenInfo.new(.35,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),
+		{Size = UDim2.new(0,700,0,420)}
+	):Play()
+
+	Main.BackgroundTransparency = 1
+
+	TweenService:Create(
+		Main,
+		TweenInfo.new(.35),
+		{BackgroundTransparency = 0}
+	):Play()
+
+	local Corner = Instance.new("UICorner")
+	Corner.CornerRadius = UDim.new(0,8)
+	Corner.Parent = Main
+
+	local Stroke = Instance.new("UIStroke")
+	Stroke.Color = Theme.Accent
+	Stroke.Thickness = 1.5
+	Stroke.Parent = Main
 
 	local TopBar = Instance.new("Frame")
 	TopBar.Size = UDim2.new(1,0,0,40)
@@ -96,10 +126,7 @@ function Library:CreateWindow(Name)
 	Title.TextSize = 18
 	Title.TextColor3 = Theme.Text
 	Title.Parent = TopBar
-
-	-- DRAG SYSTEM
-
-	local Dragging
+local Dragging
 	local DragInput
 	local DragStart
 	local StartPos
@@ -147,45 +174,57 @@ function Library:CreateWindow(Name)
 		end
 
 	end)
-
-	-- SEARCH BAR
-
-	local SearchBar = Instance.new("Frame")
-	SearchBar.Size = UDim2.new(1,-20,0,30)
-	SearchBar.Position = UDim2.new(0,10,0,45)
-	SearchBar.BackgroundColor3 = Theme.Panel
-	SearchBar.Parent = Main
-
-	local SearchCorner = Instance.new("UICorner")
-	SearchCorner.CornerRadius = UDim.new(0,6)
-	SearchCorner.Parent = SearchBar
-
-	local SearchBox = Instance.new("TextBox")
-	SearchBox.Size = UDim2.new(1,-10,1,0)
-	SearchBox.Position = UDim2.new(0,5,0,0)
-	SearchBox.BackgroundTransparency = 1
-	SearchBox.PlaceholderText = "Search..."
-	SearchBox.Text = ""
-	SearchBox.Font = Enum.Font.Gotham
-	SearchBox.TextSize = 14
-	SearchBox.TextColor3 = Theme.Text
-	SearchBox.PlaceholderColor3 = Color3.fromRGB(140,140,140)
-	SearchBox.Parent = SearchBar
-
-	local Content = Instance.new("Frame")
+	local Content = Instance.new("ScrollingFrame")
 	Content.Size = UDim2.new(0.65,-10,1,-90)
-	Content.Position = UDim2.new(0,10,0,80)
+	Content.Position = UDim2.new(0,10,0,50)
 	Content.BackgroundTransparency = 1
+	Content.ScrollBarThickness = 4
+	Content.CanvasSize = UDim2.new(0,0,0,0)
+	Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	Content.Parent = Main
+
+	local Layout = Instance.new("UIListLayout")
+	Layout.Padding = UDim.new(0,8)
+	Layout.Parent = Content
 
 	local PreviewPanel = Instance.new("Frame")
 	PreviewPanel.Size = UDim2.new(0.35,-10,1,-90)
-	PreviewPanel.Position = UDim2.new(0.65,0,0,80)
+	PreviewPanel.Position = UDim2.new(0.65,0,0,50)
 	PreviewPanel.BackgroundColor3 = Theme.Panel
 	PreviewPanel.Parent = Main
 
 	local PreviewCorner = Instance.new("UICorner")
-	PreviewCorner.CornerRadius = UDim.new(0,8)
+	PreviewCorner.Parent = PreviewPanel
+
+	local Viewport = Instance.new("ViewportFrame")
+	Viewport.Size = UDim2.new(1,-10,1,-10)
+	Viewport.Position = UDim2.new(0,5,0,5)
+	Viewport.BackgroundTransparency = 1
+	Viewport.Parent = PreviewPanel
+
+	local Camera = Instance.new("Camera")
+	Viewport.CurrentCamera = Camera
+	Camera.Parent = Viewport
+local Content = Instance.new("ScrollingFrame")
+	Content.Size = UDim2.new(0.65,-10,1,-90)
+	Content.Position = UDim2.new(0,10,0,50)
+	Content.BackgroundTransparency = 1
+	Content.ScrollBarThickness = 4
+	Content.CanvasSize = UDim2.new(0,0,0,0)
+	Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	Content.Parent = Main
+
+	local Layout = Instance.new("UIListLayout")
+	Layout.Padding = UDim.new(0,8)
+	Layout.Parent = Content
+
+	local PreviewPanel = Instance.new("Frame")
+	PreviewPanel.Size = UDim2.new(0.35,-10,1,-90)
+	PreviewPanel.Position = UDim2.new(0.65,0,0,50)
+	PreviewPanel.BackgroundColor3 = Theme.Panel
+	PreviewPanel.Parent = Main
+
+	local PreviewCorner = Instance.new("UICorner")
 	PreviewCorner.Parent = PreviewPanel
 
 	local Viewport = Instance.new("ViewportFrame")
@@ -198,10 +237,10 @@ function Library:CreateWindow(Name)
 	Viewport.CurrentCamera = Camera
 	Camera.Parent = Viewport
 
-	local Character = Player.Character or Player.CharacterAdded:Wait()
+local Character = Player.Character or Player.CharacterAdded:Wait()
 	local Clone = Character:Clone()
 
-	for i,v in pairs(Clone:GetDescendants()) do
+	for _,v in pairs(Clone:GetDescendants()) do
 		if v:IsA("LocalScript") then
 			v:Destroy()
 		end
@@ -211,95 +250,22 @@ function Library:CreateWindow(Name)
 
 	Camera.CFrame = CFrame.new(Vector3.new(0,2,6),Vector3.new(0,2,0))
 
-	local TabBar = Instance.new("Frame")
-	TabBar.Size = UDim2.new(1,0,0,40)
-	TabBar.Position = UDim2.new(0,0,1,-40)
-	TabBar.BackgroundTransparency = 1
-	TabBar.Parent = Main
+	RunService.RenderStepped:Connect(function()
+		Clone:PivotTo(Clone:GetPivot() * CFrame.Angles(0, math.rad(0.4), 0))
+	end)
+local Character = Player.Character or Player.CharacterAdded:Wait()
+	local Clone = Character:Clone()
 
-	local Layout = Instance.new("UIListLayout")
-	Layout.FillDirection = Enum.FillDirection.Horizontal
-	Layout.Padding = UDim.new(0,10)
-	Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	Layout.Parent = TabBar
-
-	local Window = {}
-
-	function Window:CreateTab(TabName)
-
-		local TabButton = Instance.new("TextButton")
-		TabButton.Size = UDim2.new(0,120,0,30)
-		TabButton.BackgroundColor3 = Theme.Panel
-		TabButton.Text = TabName
-		TabButton.Font = Enum.Font.Gotham
-		TabButton.TextColor3 = Theme.Text
-		TabButton.TextSize = 14
-		TabButton.Parent = TabBar
-
-		local ButtonCorner = Instance.new("UICorner")
-		ButtonCorner.Parent = TabButton
-
-		local Page = Instance.new("Frame")
-		Page.Size = UDim2.new(1,0,1,0)
-		Page.BackgroundTransparency = 1
-		Page.Visible = false
-		Page.Parent = Content
-
-		local Layout = Instance.new("UIListLayout")
-		Layout.Padding = UDim.new(0,8)
-		Layout.Parent = Page
-
-		local Tab = {}
-
-		TabButton.MouseButton1Click:Connect(function()
-
-			for _,v in pairs(Content:GetChildren()) do
-				if v:IsA("Frame") then
-					v.Visible = false
-				end
-			end
-
-			Page.Visible = true
-
-		end)
-
-		function Tab:CreateSection(Name)
-
-			local Section = Instance.new("Frame")
-			Section.Size = UDim2.new(1,0,0,120)
-			Section.BackgroundColor3 = Theme.Panel
-			Section.Parent = Page
-
-			local Corner = Instance.new("UICorner")
-			Corner.Parent = Section
-
-			local Title = Instance.new("TextLabel")
-			Title.Size = UDim2.new(1,0,0,25)
-			Title.BackgroundTransparency = 1
-			Title.Text = Name
-			Title.Font = Enum.Font.GothamBold
-			Title.TextSize = 14
-			Title.TextColor3 = Theme.Text
-			Title.Parent = Section
-
-			local SectionLayout = Instance.new("UIListLayout")
-			SectionLayout.Padding = UDim.new(0,6)
-			SectionLayout.Parent = Section
-
-			local SectionTable = {}
-
-			SectionTable.Container = Section
-
-			return SectionTable
-
+	for _,v in pairs(Clone:GetDescendants()) do
+		if v:IsA("LocalScript") then
+			v:Destroy()
 		end
-
-		return Tab
-
 	end
 
-	return Window
+	Clone.Parent = Viewport
 
-end
+	Camera.CFrame = CFrame.new(Vector3.new(0,2,6),Vector3.new(0,2,0))
 
-return Library
+	RunService.RenderStepped:Connect(function()
+		Clone:PivotTo(Clone:GetPivot() * CFrame.Angles(0, math.rad(0.4), 0))
+	end)
