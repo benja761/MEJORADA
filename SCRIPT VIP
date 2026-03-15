@@ -1,3 +1,4 @@
+
 -- Valary-style UI Library (safe visual mockup)
 -- Neutral UI framework inspired by the layout/style in the references.
 -- No exploit/cheat logic is implemented.
@@ -1274,6 +1275,8 @@ function Library:BuildDemo(window)
         r:AddToggle("Distance", false)
         r:AddSlider("Distance Text Size", 8, 24, 11)
     end
+
+
     local localPlayerTab = player:AddSubTab("Player")
     do
         local l = localPlayerTab:AddSection("Local Player Utilities", "left")
@@ -1281,9 +1284,9 @@ function Library:BuildDemo(window)
         l:AddToggle("Instant Interact", false)
         l:AddToggle("Respawn Where You Died", false)
         l:AddToggle("Hide Name - Client Only", false)
-        l:AddDropdown("No-Clip Keybind", {"X", "Z", "C", "V"}, "X")
+        l:AddDropdown("Movement Keybind", {"X", "Z", "C", "V"}, "X")
         l:AddSlider("Speed Value", 0, 100, 25)
-        l:AddDropdown("Speed Keybind", {"G", "H", "V", "B"}, "G")
+        l:AddDropdown("Action Keybind", {"G", "H", "V", "B"}, "G")
 
         local r = localPlayerTab:AddSection("Character Utilities", "right")
         r:AddToggle("Fly", false)
@@ -1312,25 +1315,39 @@ function Library:BuildDemo(window)
         r:AddButton("Server Hop", function()
             window:Notify("Placeholder")
         end)
+        r:AddButton("Copy JobId", function()
+            window:Notify("Placeholder")
+        end)
     end
 
     local cfg = settings:AddSubTab("Configs")
     do
         local l = cfg:AddSection("Configuration", "left")
-        l:AddTextbox("Config Name", "my config")
+        local configName = l:AddTextbox("Config Name", "default", function() end)
+
         l:AddButton("Save Settings", function()
-            window:SaveConfig("default")
-            window:Notify("Settings saved")
+            local name = configName.Text ~= "" and configName.Text or "default"
+            window:SaveConfig(name)
+            window:Notify("Settings saved: " .. name)
         end)
+
         l:AddButton("Load Settings", function()
-            local ok = window:LoadConfig("default")
-            window:Notify(ok and "Settings loaded" or "No config found")
+            local name = configName.Text ~= "" and configName.Text or "default"
+            local ok = window:LoadConfig(name)
+            window:Notify(ok and ("Settings loaded: " .. name) or ("No config found: " .. name))
+        end)
+
+        l:AddButton("Reset Settings", function()
+            window:Notify("Settings reset")
         end)
 
         local r = cfg:AddSection("Menu Settings", "right")
         r:AddDropdown("Tweening Style", {"Quad", "Linear", "Cubic", "Quint"}, "Quad")
         r:AddDropdown("Direction", {"Out", "In", "InOut"}, "Out")
         r:AddSlider("Tween Time", 0.05, 1, 0.18)
+        r:AddToggle("Watermark", false)
+        r:AddToggle("Keybind List", false)
+        r:AddToggle("Global Chat", false)
         r:AddButton("Unload UI", function()
             if window.PreviewConn then
                 window.PreviewConn:Disconnect()
@@ -1351,11 +1368,13 @@ function Library:BuildDemo(window)
             Color3.fromRGB(0, 170, 255),
             Color3.fromRGB(0, 255, 140)
         })
+        l:AddLabel("Preset chips are visual in this mockup.")
 
         local r = theming:AddSection("Interface", "right")
-        r:AddToggle("Watermark", false)
-        r:AddToggle("Keybind List", false)
         r:AddToggle("Notifications", true)
+        r:AddToggle("Blur Background", true)
+        r:AddToggle("Show Preview Panel", true)
+        r:AddDropdown("Theme", {"Dark Red", "Purple", "Blue", "Green"}, "Dark Red")
     end
 
     main:Show()
