@@ -1274,3 +1274,91 @@ function Library:BuildDemo(window)
         r:AddToggle("Distance", false)
         r:AddSlider("Distance Text Size", 8, 24, 11)
     end
+    local localPlayerTab = player:AddSubTab("Player")
+    do
+        local l = localPlayerTab:AddSection("Local Player Utilities", "left")
+        l:AddToggle("Infinite Stamina", false)
+        l:AddToggle("Instant Interact", false)
+        l:AddToggle("Respawn Where You Died", false)
+        l:AddToggle("Hide Name - Client Only", false)
+        l:AddDropdown("No-Clip Keybind", {"X", "Z", "C", "V"}, "X")
+        l:AddSlider("Speed Value", 0, 100, 25)
+        l:AddDropdown("Speed Keybind", {"G", "H", "V", "B"}, "G")
+
+        local r = localPlayerTab:AddSection("Character Utilities", "right")
+        r:AddToggle("Fly", false)
+        r:AddSlider("Jump Power", 0, 150, 50)
+        r:AddSlider("Walk Speed", 0, 100, 16)
+        r:AddButton("Refresh Character", function()
+            window:Notify("Character refreshed")
+        end)
+    end
+
+    local miscPlayer = player:AddSubTab("Misc")
+    do
+        local l = miscPlayer:AddSection("Other Player Utilities", "left")
+        l:AddTextbox("Target Player", "player name...")
+        l:AddButton("View Target", function()
+            window:Notify("Placeholder")
+        end)
+        l:AddButton("Teleport To Target", function()
+            window:Notify("Placeholder")
+        end)
+
+        local r = miscPlayer:AddSection("Server Utilities", "right")
+        r:AddButton("Rejoin", function()
+            window:Notify("Placeholder")
+        end)
+        r:AddButton("Server Hop", function()
+            window:Notify("Placeholder")
+        end)
+    end
+
+    local cfg = settings:AddSubTab("Configs")
+    do
+        local l = cfg:AddSection("Configuration", "left")
+        l:AddTextbox("Config Name", "my config")
+        l:AddButton("Save Settings", function()
+            window:SaveConfig("default")
+            window:Notify("Settings saved")
+        end)
+        l:AddButton("Load Settings", function()
+            local ok = window:LoadConfig("default")
+            window:Notify(ok and "Settings loaded" or "No config found")
+        end)
+
+        local r = cfg:AddSection("Menu Settings", "right")
+        r:AddDropdown("Tweening Style", {"Quad", "Linear", "Cubic", "Quint"}, "Quad")
+        r:AddDropdown("Direction", {"Out", "In", "InOut"}, "Out")
+        r:AddSlider("Tween Time", 0.05, 1, 0.18)
+        r:AddButton("Unload UI", function()
+            if window.PreviewConn then
+                window.PreviewConn:Disconnect()
+            end
+            if window.Blur then
+                window.Blur:Destroy()
+            end
+            window.GUI:Destroy()
+        end)
+    end
+
+    local theming = settings:AddSubTab("Theming")
+    do
+        local l = theming:AddSection("Accent Presets", "left")
+        l:AddColorChipRow("Presets", {
+            Color3.fromRGB(255, 34, 34),
+            Color3.fromRGB(170, 85, 255),
+            Color3.fromRGB(0, 170, 255),
+            Color3.fromRGB(0, 255, 140)
+        })
+
+        local r = theming:AddSection("Interface", "right")
+        r:AddToggle("Watermark", false)
+        r:AddToggle("Keybind List", false)
+        r:AddToggle("Notifications", true)
+    end
+
+    main:Show()
+end
+
+return Library
