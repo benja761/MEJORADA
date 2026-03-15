@@ -74,7 +74,6 @@ function Library:CreateWindow(Name)
 
 	local function Update(Input)
 		local Delta = Input.Position - DragStart
-
 		Main.Position = UDim2.new(
 			StartPos.X.Scale,
 			StartPos.X.Offset + Delta.X,
@@ -159,22 +158,31 @@ function Library:CreateWindow(Name)
 	Viewport.CurrentCamera = Camera
 	Camera.Parent = Viewport
 
-	local Character = Player.Character or Player.CharacterAdded:Wait()
-	local Clone = Character:Clone()
+	local Character = Player.Character
 
-	for _,v in pairs(Clone:GetDescendants()) do
-		if v:IsA("LocalScript") then
-			v:Destroy()
-		end
+	if not Character then
+		Character = Player.CharacterAdded:Wait()
 	end
 
-	Clone.Parent = Viewport
+	local Clone = Character and Character:Clone()
 
-	Camera.CFrame = CFrame.new(Vector3.new(0,2,6),Vector3.new(0,2,0))
+	if Clone then
 
-	RunService.RenderStepped:Connect(function()
-		Clone:PivotTo(Clone:GetPivot() * CFrame.Angles(0, math.rad(0.4), 0))
-	end)
+		for _,v in ipairs(Clone:GetDescendants()) do
+			if v:IsA("LocalScript") then
+				v:Destroy()
+			end
+		end
+
+		Clone.Parent = Viewport
+
+		Camera.CFrame = CFrame.new(Vector3.new(0,2,6),Vector3.new(0,2,0))
+
+		RunService.RenderStepped:Connect(function()
+			Clone:PivotTo(Clone:GetPivot() * CFrame.Angles(0, math.rad(0.4), 0))
+		end)
+
+	end
 
 	local Window = {}
 
