@@ -1,0 +1,149 @@
+local lib = {}
+
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+
+local theme = {
+    bg = Color3.fromRGB(18,18,18),
+    panel = Color3.fromRGB(28,28,28),
+    accent = Color3.fromRGB(170,85,255),
+    text = Color3.fromRGB(240,240,240)
+}
+function lib:Window(title)
+
+    local gui = Instance.new("ScreenGui")
+    gui.Parent = game.CoreGui
+
+    local main = Instance.new("Frame")
+    main.Size = UDim2.new(0,500,0,350)
+    main.Position = UDim2.new(.5,-250,.5,-175)
+    main.BackgroundColor3 = theme.bg
+    main.Parent = gui
+
+    local corner = Instance.new("UICorner")
+    corner.Parent = main
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = theme.accent
+    stroke.Parent = main
+
+function lib:Window(title)
+
+    local gui = Instance.new("ScreenGui")
+    gui.Parent = game.CoreGui
+
+    local main = Instance.new("Frame")
+    main.Size = UDim2.new(0,500,0,350)
+    main.Position = UDim2.new(.5,-250,.5,-175)
+    main.BackgroundColor3 = theme.bg
+    main.Parent = gui
+
+    local corner = Instance.new("UICorner")
+    corner.Parent = main
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = theme.accent
+    stroke.Parent = main
+    function tabs:Tab(name)
+
+        local tab = {}
+
+        local page = Instance.new("Frame")
+        page.Size = UDim2.new(1,0,1,0)
+        page.BackgroundTransparency = 1
+        page.Visible = true
+        page.Parent = container
+
+        function tab:Toggle(text,callback)
+
+            local toggle = Instance.new("TextButton")
+            toggle.Size = UDim2.new(0,200,0,30)
+            toggle.Text = text
+            toggle.BackgroundColor3 = theme.panel
+            toggle.TextColor3 = theme.text
+            toggle.Parent = page
+
+            local state = false
+
+            toggle.MouseButton1Click:Connect(function()
+
+                state = not state
+
+                TweenService:Create(
+                    toggle,
+                    TweenInfo.new(.15),
+                    {BackgroundColor3 = state and theme.accent or theme.panel}
+                ):Play()
+
+                callback(state)
+
+            end)
+
+        end
+        function tab:Toggle(text,callback)
+
+            local toggle = Instance.new("TextButton")
+            toggle.Size = UDim2.new(0,200,0,30)
+            toggle.Text = text
+            toggle.BackgroundColor3 = theme.panel
+            toggle.TextColor3 = theme.text
+            toggle.Parent = page
+
+            local state = false
+
+            toggle.MouseButton1Click:Connect(function()
+
+                state = not state
+
+                TweenService:Create(
+                    toggle,
+                    TweenInfo.new(.15),
+                    {BackgroundColor3 = state and theme.accent or theme.panel}
+                ):Play()
+
+                callback(state)
+
+            end)
+
+        end
+            slider.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = true
+                end
+            end)
+
+            slider.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = false
+                end
+            end)
+
+            UIS.InputChanged:Connect(function(input)
+
+                if dragging then
+
+                    local percent = math.clamp(
+                        (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X,
+                        0,1
+                    )
+
+                    fill.Size = UDim2.new(percent,0,1,0)
+
+                    local value = math.floor((max-min)*percent+min)
+
+                    callback(value)
+
+                end
+
+            end)
+
+        end
+        return tab
+
+    end
+
+    return tabs
+
+end
+
+return lib
