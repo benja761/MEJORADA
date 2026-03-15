@@ -48,18 +48,10 @@ function Library:CreateWindow(Name)
 	Corner.CornerRadius = UDim.new(0,10)
 	Corner.Parent = Main
 
-	local Stroke = Instance.new("UIStroke")
-	Stroke.Color = Theme.Accent
-	Stroke.Thickness = 1.5
-	Stroke.Parent = Main
-Main.BackgroundColor3 = Theme.Main
-	Main.Parent = GUI
+	
 
-	TweenService:Create(
-		Main,
-		TweenInfo.new(.35,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),
-		{Size = UDim2.new(0,700,0,440)}
-	):Play()
+
+	
 
 	Main.BackgroundTransparency = 1
 
@@ -77,9 +69,6 @@ Main.BackgroundColor3 = Theme.Main
 	Stroke.Color = Theme.Accent
 	Stroke.Thickness = 1.5
 	Stroke.Parent = Main
-PARTE 2 (DRAG + TOPBAR)
-
-Pega debajo de la parte 1
 
 	local TopBar = Instance.new("Frame")
 	TopBar.Size = UDim2.new(1,0,0,40)
@@ -169,13 +158,7 @@ Main.BackgroundColor3 = Theme.Main
 	Corner.CornerRadius = UDim.new(0,10)
 	Corner.Parent = Main
 
-	local Stroke = Instance.new("UIStroke")
-	Stroke.Color = Theme.Accent
-	Stroke.Thickness = 1.5
-	Stroke.Parent = Main
-PARTE 2 (DRAG + TOPBAR)
-
-Pega debajo de la parte 1
+	
 
 	local TopBar = Instance.new("Frame")
 	TopBar.Size = UDim2.new(1,0,0,40)
@@ -276,7 +259,7 @@ local SearchBar = Instance.new("Frame")
 	local Layout = Instance.new("UIListLayout")
 	Layout.Padding = UDim.new(0,8)
 	Layout.Parent = Content
-local SearchBar = Instance.new("Frame")
+
 	SearchBar.Size = UDim2.new(1,-20,0,30)
 	SearchBar.Position = UDim2.new(0,10,0,45)
 	SearchBar.BackgroundColor3 = Theme.Panel
