@@ -48,23 +48,6 @@ function Library:CreateWindow(Name)
 	Corner.CornerRadius = UDim.new(0,10)
 	Corner.Parent = Main
 
-	
-
-
-	
-
-	Main.BackgroundTransparency = 1
-
-	TweenService:Create(
-		Main,
-		TweenInfo.new(.35),
-		{BackgroundTransparency = 0}
-	):Play()
-
-	local Corner = Instance.new("UICorner")
-	Corner.CornerRadius = UDim.new(0,10)
-	Corner.Parent = Main
-
 	local Stroke = Instance.new("UIStroke")
 	Stroke.Color = Theme.Accent
 	Stroke.Thickness = 1.5
@@ -90,7 +73,6 @@ function Library:CreateWindow(Name)
 	local StartPos
 
 	local function Update(Input)
-
 		local Delta = Input.Position - DragStart
 
 		Main.Position = UDim2.new(
@@ -99,135 +81,35 @@ function Library:CreateWindow(Name)
 			StartPos.Y.Scale,
 			StartPos.Y.Offset + Delta.Y
 		)
-
 	end
 
 	TopBar.InputBegan:Connect(function(Input)
-
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-
 			Dragging = true
 			DragStart = Input.Position
 			StartPos = Main.Position
 
 			Input.Changed:Connect(function()
-
 				if Input.UserInputState == Enum.UserInputState.End then
 					Dragging = false
 				end
-
 			end)
-
 		end
-
 	end)
 
 	TopBar.InputChanged:Connect(function(Input)
-
 		if Input.UserInputType == Enum.UserInputType.MouseMovement then
 			DragInput = Input
 		end
-
 	end)
 
 	UIS.InputChanged:Connect(function(Input)
-
 		if Input == DragInput and Dragging then
 			Update(Input)
 		end
-
-	end)
-Main.BackgroundColor3 = Theme.Main
-	Main.Parent = GUI
-
-	TweenService:Create(
-		Main,
-		TweenInfo.new(.35,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),
-		{Size = UDim2.new(0,700,0,440)}
-	):Play()
-
-	Main.BackgroundTransparency = 1
-
-	TweenService:Create(
-		Main,
-		TweenInfo.new(.35),
-		{BackgroundTransparency = 0}
-	):Play()
-
-	local Corner = Instance.new("UICorner")
-	Corner.CornerRadius = UDim.new(0,10)
-	Corner.Parent = Main
-
-	
-
-	local TopBar = Instance.new("Frame")
-	TopBar.Size = UDim2.new(1,0,0,40)
-	TopBar.BackgroundTransparency = 1
-	TopBar.Parent = Main
-
-	local Title = Instance.new("TextLabel")
-	Title.Size = UDim2.new(1,0,1,0)
-	Title.BackgroundTransparency = 1
-	Title.Text = Name
-	Title.Font = Enum.Font.GothamBold
-	Title.TextSize = 18
-	Title.TextColor3 = Theme.Text
-	Title.Parent = TopBar
-
-	local Dragging
-	local DragInput
-	local DragStart
-	local StartPos
-
-	local function Update(Input)
-
-		local Delta = Input.Position - DragStart
-
-		Main.Position = UDim2.new(
-			StartPos.X.Scale,
-			StartPos.X.Offset + Delta.X,
-			StartPos.Y.Scale,
-			StartPos.Y.Offset + Delta.Y
-		)
-
-	end
-
-	TopBar.InputBegan:Connect(function(Input)
-
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-			Dragging = true
-			DragStart = Input.Position
-			StartPos = Main.Position
-
-			Input.Changed:Connect(function()
-
-				if Input.UserInputState == Enum.UserInputState.End then
-					Dragging = false
-				end
-
-			end)
-
-		end
-
 	end)
 
-	TopBar.InputChanged:Connect(function(Input)
-
-		if Input.UserInputType == Enum.UserInputType.MouseMovement then
-			DragInput = Input
-		end
-
-	end)
-
-	UIS.InputChanged:Connect(function(Input)
-
-		if Input == DragInput and Dragging then
-			Update(Input)
-		end
-
-	end)
-local SearchBar = Instance.new("Frame")
+	local SearchBar = Instance.new("Frame")
 	SearchBar.Size = UDim2.new(1,-20,0,30)
 	SearchBar.Position = UDim2.new(0,10,0,45)
 	SearchBar.BackgroundColor3 = Theme.Panel
@@ -241,7 +123,6 @@ local SearchBar = Instance.new("Frame")
 	SearchBox.Position = UDim2.new(0,5,0,0)
 	SearchBox.BackgroundTransparency = 1
 	SearchBox.PlaceholderText = "Search..."
-	SearchBox.Text = ""
 	SearchBox.Font = Enum.Font.Gotham
 	SearchBox.TextSize = 14
 	SearchBox.TextColor3 = Theme.Text
@@ -252,7 +133,6 @@ local SearchBar = Instance.new("Frame")
 	Content.Position = UDim2.new(0,10,0,80)
 	Content.BackgroundTransparency = 1
 	Content.ScrollBarThickness = 4
-	Content.CanvasSize = UDim2.new(0,0,0,0)
 	Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	Content.Parent = Main
 
@@ -260,39 +140,7 @@ local SearchBar = Instance.new("Frame")
 	Layout.Padding = UDim.new(0,8)
 	Layout.Parent = Content
 
-	SearchBar.Size = UDim2.new(1,-20,0,30)
-	SearchBar.Position = UDim2.new(0,10,0,45)
-	SearchBar.BackgroundColor3 = Theme.Panel
-	SearchBar.Parent = Main
-
-	local SearchCorner = Instance.new("UICorner")
-	SearchCorner.Parent = SearchBar
-
-	local SearchBox = Instance.new("TextBox")
-	SearchBox.Size = UDim2.new(1,-10,1,0)
-	SearchBox.Position = UDim2.new(0,5,0,0)
-	SearchBox.BackgroundTransparency = 1
-	SearchBox.PlaceholderText = "Search..."
-	SearchBox.Text = ""
-	SearchBox.Font = Enum.Font.Gotham
-	SearchBox.TextSize = 14
-	SearchBox.TextColor3 = Theme.Text
-	SearchBox.Parent = SearchBar
-
-	local Content = Instance.new("ScrollingFrame")
-	Content.Size = UDim2.new(0.65,-10,1,-90)
-	Content.Position = UDim2.new(0,10,0,80)
-	Content.BackgroundTransparency = 1
-	Content.ScrollBarThickness = 4
-	Content.CanvasSize = UDim2.new(0,0,0,0)
-	Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	Content.Parent = Main
-
-	local Layout = Instance.new("UIListLayout")
-	Layout.Padding = UDim.new(0,8)
-	Layout.Parent = Content
-
-local PreviewPanel = Instance.new("Frame")
+	local PreviewPanel = Instance.new("Frame")
 	PreviewPanel.Size = UDim2.new(0.35,-10,1,-90)
 	PreviewPanel.Position = UDim2.new(0.65,0,0,80)
 	PreviewPanel.BackgroundColor3 = Theme.Panel
@@ -328,7 +176,7 @@ local PreviewPanel = Instance.new("Frame")
 		Clone:PivotTo(Clone:GetPivot() * CFrame.Angles(0, math.rad(0.4), 0))
 	end)
 
-local Window = {}
+	local Window = {}
 
 	function Window:Button(Text,Callback)
 
