@@ -93,28 +93,28 @@ local State = {
 	MenuVisible = true,
 	MenuKey = Enum.KeyCode.RightShift,
 	ThemeName = "PureBlack",
-	Glow = true,
+	Glow = false,
 	Blur = false,
 	Search = "",
 
 	NpcESP = false,
-	NpcNames = true,
-	NpcDistance = true,
-	NpcHealth = true,
-	NpcState = true,
-	NpcTarget = true,
+	NpcNames = false,
+	NpcDistance = false,
+	NpcHealth = false,
+	NpcState = false,
+	NpcTarget = false,
 	NpcTag = "DebugNPC",
 	NpcColor = "Red",
 	NpcMaxDistance = 350,
-	NpcUseTags = true,
+	NpcUseTags = false,
 
 	ObjectESP = false,
-	ObjectNames = true,
-	ObjectDistance = true,
+	ObjectNames = false,
+	ObjectDistance = false,
 	ObjectTag = "DebugObject",
 	ObjectColor = "Blue",
 	ObjectMaxDistance = 250,
-	ObjectUseTags = true,
+	ObjectUseTags = false,
 
 	SpawnESP = false,
 	SpawnTag = "SpawnPoint",
@@ -137,11 +137,11 @@ local State = {
 
 	MaxTracked = 120,
 	RefreshRate = 0.14,
-	UseFolderFallback = true,
+	UseFolderFallback = false,
 
 	LocalWalkSpeed = 16,
 	LocalJumpPower = 50,
-	ShowSelfInfo = true,
+	ShowSelfInfo = false,
 	ShowSelfMarker = false,
 
 	AimUIEnabled = false,
@@ -149,7 +149,7 @@ local State = {
 	AimKey = Enum.KeyCode.E,
 	AimSmooth = 5,
 	AimFov = 140,
-	AimShowFOV = true,
+	AimShowFOV = false,
 	AimTarget = "Head",
 	AimSticky = false,
 	AimOnlyPlaceholder = true
@@ -2545,3 +2545,4 @@ setGlowVisible(State.Glow)
 setBlur(State.Blur)
 loop()
 notify("Loaded", "Premium admin/debug panel loaded correctly.")
+
