@@ -1317,6 +1317,18 @@ local function buildInterface()
 	headerFix.Parent = App.Header
 	registerTheme(headerFix, "BackgroundColor3", "Panel")
 
+	App.DragHandle = create("TextButton", {
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 0, 0, 0),
+		Size = UDim2.new(1, -170, 1, 0),
+		Text = "",
+		AutoButtonColor = false,
+		ZIndex = 10,
+		Active = true
+	})
+	App.DragHandle.Parent = App.Header
+
 	local title = create("TextLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 16, 0, 8),
@@ -1358,7 +1370,8 @@ local function buildInterface()
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -12, 0, 10),
-		Size = UDim2.new(0, 156, 0, 28)
+		Size = UDim2.new(0, 156, 0, 28),
+		ZIndex = 20
 	})
 	topButtons.Parent = App.Header
 	local topLayout = create("UIListLayout", {
@@ -1567,6 +1580,19 @@ local function buildInterface()
 		TextXAlignment = Enum.TextXAlignment.Left
 	})
 	App.PageDesc.Parent = App.Content
+
+	App.HotkeyLabel = create("TextLabel", {
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -16, 0, 18),
+		Size = UDim2.new(0, 180, 0, 16),
+		Text = "Toggle: " .. tostring(State.MenuKey.Name),
+		Font = Enum.Font.Gotham,
+		TextSize = 11,
+		TextXAlignment = Enum.TextXAlignment.Right
+	})
+	App.HotkeyLabel.Parent = App.Content
+	registerTheme(App.HotkeyLabel, "TextColor3", "SubText")
 	registerTheme(App.PageDesc, "TextColor3", "SubText")
 
 	App.PageHolder = create("Frame", {
@@ -2422,15 +2448,32 @@ end
 
 
 local function refreshMenuState()
-	if not App or not App.Root then
+	if not App or not App.Root or not App.Gui then
 		return
 	end
 
+	App.Gui.Enabled = true
 	App.Root.Visible = State.MenuVisible
 
+	if App.LoginOverlay then
+		App.LoginOverlay.Visible = State.MenuVisible
+	end
+
+	if App.PopupLayer then
+		App.PopupLayer.Visible = State.MenuVisible
+	end
+
+	if App.FovCircle then
+		App.FovCircle.Visible = State.MenuVisible and State.AimShowFOV or false
+	end
+
 	if App.Sidebar and App.Content then
-		App.Sidebar.Visible = not State.MenuMinimized
-		App.Content.Visible = not State.MenuMinimized
+		App.Sidebar.Visible = State.MenuVisible and (not State.MenuMinimized)
+		App.Content.Visible = State.MenuVisible and (not State.MenuMinimized)
+	end
+
+	if App.HotkeyLabel then
+		App.HotkeyLabel.Text = "Toggle: " .. tostring(State.MenuKey.Name)
 	end
 
 	if State.MenuMinimized then
@@ -2451,7 +2494,7 @@ local function refreshFovState()
 	local size = math.max(40, tonumber(State.AimFov) or 140) * 2
 	App.FovCircle.Size = UDim2.new(0, size, 0, size)
 	App.FovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-	App.FovCircle.Visible = State.AimShowFOV and true or false
+	App.FovCircle.Visible = State.MenuVisible and State.AimShowFOV or false
 end
 
 local function hookEvents()
@@ -2463,6 +2506,31 @@ local function hookEvents()
 	local dragActive = false
 	local dragStart = nil
 	local startPos = nil
+
+	local function beginDrag(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragActive = true
+			dragStart = input.Position
+			startPos = App.Root.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragActive = false
+				end
+			end)
+		end
+	end
+
+	local function moveDrag(input)
+		if dragActive and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and startPos then
+			local delta = input.Position - dragStart
+			App.Root.Position = UDim2.new(
+				startPos.X.Scale,
+				startPos.X.Offset + delta.X,
+				startPos.Y.Scale,
+				startPos.Y.Offset + delta.Y
+			)
+		end
+	end
 
 	App.MinButton.MouseButton1Click:Connect(function()
 		State.MenuMinimized = not State.MenuMinimized
@@ -2486,30 +2554,13 @@ local function hookEvents()
 	end)
 
 	App.Header.Active = true
-	App.Header.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			dragActive = true
-			dragStart = input.Position
-			startPos = App.Root.Position
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragActive = false
-				end
-			end)
-		end
-	end)
+	if App.DragHandle then
+		App.DragHandle.Active = true
+		App.DragHandle.InputBegan:Connect(beginDrag)
+	end
+	App.Header.InputBegan:Connect(beginDrag)
 
-	UserInputService.InputChanged:Connect(function(input)
-		if dragActive and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and startPos then
-			local delta = input.Position - dragStart
-			App.Root.Position = UDim2.new(
-				startPos.X.Scale,
-				startPos.X.Offset + delta.X,
-				startPos.Y.Scale,
-				startPos.Y.Offset + delta.Y
-			)
-		end
-	end)
+	UserInputService.InputChanged:Connect(moveDrag)
 
 	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -2518,13 +2569,14 @@ local function hookEvents()
 	end)
 
 	UserInputService.InputBegan:Connect(function(input, gp)
-		if gp then
-			return
-		end
-
 		if input.KeyCode == State.MenuKey then
 			State.MenuVisible = not State.MenuVisible
 			refreshMenuState()
+			return
+		end
+
+		if gp then
+			return
 		end
 	end)
 
