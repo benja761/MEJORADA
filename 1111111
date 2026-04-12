@@ -1969,6 +1969,16 @@ refreshLobbyCards = function()
         dist.Parent = card
         registerTheme(dist, "TextColor3", "Sub")
 
+        local tpBtn = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,10,1,-32), Size=UDim2.new(0,50,0,22), Text='TP', Font=Enum.Font.GothamBold, TextSize=11, AutoButtonColor=false})
+        tpBtn.Parent = card
+        registerTheme(tpBtn, "BackgroundColor3", "Main")
+        registerTheme(tpBtn, "TextColor3", "Text")
+        addCorner(tpBtn, 8)
+        addStroke(tpBtn)
+        tpBtn.MouseButton1Click:Connect(function()
+            notify("Perf", "TP placeholder para " .. plr.DisplayName .. ". El botón está solo visible, sin acción.")
+        end)
+
         local btn = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(1,-74,1,-32), Size=UDim2.new(0,64,0,22), Text='Watch', Font=Enum.Font.GothamBold, TextSize=11, AutoButtonColor=false})
         btn.Parent = card
         registerTheme(btn, "BackgroundColor3", "Main")
@@ -2237,4 +2247,3 @@ task.delay(5, function()
     App.Root.Visible = true
     notify("Nexhidera", "Menu loaded correctly.")
 end)
-
