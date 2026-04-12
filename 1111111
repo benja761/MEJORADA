@@ -19,7 +19,7 @@ end)
 local App = {
     Theme = {
         Main = Color3.fromRGB(11, 11, 14),
-        Panel = Color3.fromRGB(18, 18, 22),
+        Panel = Color3.fromRGB(10, 10, 14),
         Panel2 = Color3.fromRGB(24, 24, 30),
         Stroke = Color3.fromRGB(45, 45, 54),
         Text = Color3.fromRGB(255, 255, 255),
@@ -82,6 +82,9 @@ local State = {
 
     ConfigName = "default",
     SelectedConfig = "default",
+
+    MenuColor = Color3.fromRGB(245, 245, 255),
+    MenuTextColor = Color3.fromRGB(255, 255, 255),
 }
 
 local notify, rebuildPreview, refreshMenuState, updateFOV, refreshLobbyCards
@@ -170,13 +173,19 @@ end
 
 local function getHealthColor(pct)
     pct = math.clamp(pct or 0, 0, 1)
-    local red = Color3.fromRGB(255, 70, 70)
-    local yellow = Color3.fromRGB(255, 220, 75)
-    local green = Color3.fromRGB(110, 255, 145)
-    if pct <= 0.5 then
-        return colorLerp(red, yellow, pct / 0.5)
+    local red = Color3.fromRGB(255, 46, 46)
+    local orange = Color3.fromRGB(255, 132, 54)
+    local yellow = Color3.fromRGB(255, 224, 74)
+    local lime = Color3.fromRGB(175, 255, 92)
+    local green = Color3.fromRGB(82, 255, 132)
+    if pct <= 0.25 then
+        return colorLerp(red, orange, pct / 0.25)
+    elseif pct <= 0.5 then
+        return colorLerp(orange, yellow, (pct - 0.25) / 0.25)
+    elseif pct <= 0.75 then
+        return colorLerp(yellow, lime, (pct - 0.5) / 0.25)
     end
-    return colorLerp(yellow, green, (pct - 0.5) / 0.5)
+    return colorLerp(lime, green, (pct - 0.75) / 0.25)
 end
 
 local function registerTheme(inst, prop, key)
@@ -190,6 +199,32 @@ local function applyTheme()
             pcall(function() item[1][item[2]] = App.Theme[item[3]] end)
         end
     end
+    if App.FOVCircle then
+        local stroke = App.FOVCircle:FindFirstChildOfClass("UIStroke")
+        if stroke then
+            stroke.Color = App.Theme.Accent
+        end
+    end
+    if App.HeaderLight then
+        App.HeaderLight.BackgroundColor3 = App.Theme.AccentSoft
+    end
+    if App.HeaderBloom then
+        App.HeaderBloom.BackgroundColor3 = App.Theme.Accent
+    end
+end
+
+local function rebuildThemeColors()
+    local accent = State.MenuColor or Color3.fromRGB(245, 245, 255)
+    local textColor = State.MenuTextColor or Color3.fromRGB(255, 255, 255)
+    App.Theme.Accent = accent
+    App.Theme.AccentSoft = colorLerp(accent, Color3.fromRGB(255, 255, 255), 0.38)
+    App.Theme.Text = textColor
+    App.Theme.Sub = colorLerp(textColor, Color3.fromRGB(118, 118, 128), 0.58)
+    App.Theme.Main = colorLerp(Color3.fromRGB(9, 9, 12), accent, 0.07)
+    App.Theme.Panel = colorLerp(Color3.fromRGB(17, 17, 22), accent, 0.11)
+    App.Theme.Panel2 = colorLerp(Color3.fromRGB(24, 24, 31), accent, 0.16)
+    App.Theme.Stroke = colorLerp(Color3.fromRGB(44, 44, 54), accent, 0.24)
+    applyTheme()
 end
 
 local function bindControl(name, control)
@@ -266,6 +301,8 @@ end
 
 local function applyLoadedState(data)
     local color = deserializeColor3(data.ESPColor)
+    local menuColor = deserializeColor3(data.MenuColor or State.MenuColor)
+    local menuTextColor = deserializeColor3(data.MenuTextColor or State.MenuTextColor)
     local menuKey = deserializeBind(data.MenuKey, State.MenuKey)
     local aimKey = deserializeBind(data.AimKey, State.AimKey)
 
@@ -276,6 +313,8 @@ local function applyLoadedState(data)
         end
     end
 
+    setIf("MenuColor", menuColor)
+    setIf("MenuTextColor", menuTextColor)
     setIf("MenuKey", menuKey)
     setIf("AimKey", aimKey)
     setIf("ESPEnabled", data.ESPEnabled == true)
@@ -331,6 +370,8 @@ local function saveCurrentConfig(name)
     ensureConfigFolder()
     local payload = {
         ConfigName = clean,
+        MenuColor = serializeColor3(State.MenuColor),
+        MenuTextColor = serializeColor3(State.MenuTextColor),
         MenuKey = serializeBind(State.MenuKey),
         AimKey = serializeBind(State.AimKey),
         ESPEnabled = State.ESPEnabled,
@@ -862,35 +903,59 @@ local function createColorPicker(parent, title, desc, defaultColor, cb)
     d.Parent = h
     registerTheme(d, "TextColor3", "Sub")
 
-    local b = create("TextButton", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,96,0,24), Text="Palette", Font=Enum.Font.GothamBold, TextSize=12, AutoButtonColor=false, BorderSizePixel=0, BackgroundColor3=defaultColor})
+    local b = create("TextButton", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,96,0,24), Text="Colors", Font=Enum.Font.GothamBold, TextSize=12, AutoButtonColor=false, BorderSizePixel=0, BackgroundColor3=defaultColor})
     b.Parent = h
     addCorner(b, 8)
     addStroke(b)
 
-    local popup = makePopup(170, 138)
-    local titleBar = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,8), Size=UDim2.new(1,-20,0,18), Text="Pick a color", Font=Enum.Font.GothamBold, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=101})
+    local popup = makePopup(236, 214)
+    local titleBar = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,8), Size=UDim2.new(1,-20,0,18), Text="Color Menu", Font=Enum.Font.GothamBold, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=101})
     titleBar.Parent = popup
     registerTheme(titleBar, "TextColor3", "Text")
 
-    local grid = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,8,0,32), Size=UDim2.new(1,-16,1,-40), ZIndex=101})
+    local preview = create("Frame", {BackgroundColor3=defaultColor, BorderSizePixel=0, Position=UDim2.new(0,10,0,32), Size=UDim2.new(1,-20,0,28), ZIndex=101})
+    preview.Parent = popup
+    addCorner(preview, 10)
+    addStroke(preview, Color3.fromRGB(255,255,255), 1)
+
+    local hint = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,64), Size=UDim2.new(1,-20,0,14), Text="Pick a swatch from the menu", Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=101})
+    hint.Parent = popup
+    registerTheme(hint, "TextColor3", "Sub")
+
+    local grid = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,84), Size=UDim2.new(1,-20,1,-94), ZIndex=101})
     grid.Parent = popup
-    local gl = create("UIGridLayout", {CellSize=UDim2.new(0,34,0,24), CellPadding=UDim2.new(0,6,0,6)})
+    local gl = create("UIGridLayout", {CellSize=UDim2.new(0,30,0,22), CellPadding=UDim2.new(0,6,0,6)})
     gl.Parent = grid
+
+    local palette = {}
+    for i = 0, 11 do
+        table.insert(palette, Color3.fromHSV(i / 12, 1, 1))
+    end
+    for i = 0, 11 do
+        table.insert(palette, Color3.fromHSV(i / 12, 0.7, 1))
+    end
+    for i = 0, 11 do
+        table.insert(palette, Color3.fromHSV(i / 12, 0.9, 0.65))
+    end
+    for _, gray in ipairs({250, 225, 195, 155, 115, 80, 45}) do
+        table.insert(palette, Color3.fromRGB(gray, gray, gray))
+    end
 
     local state = defaultColor
     local function set(c)
         state = c
         b.BackgroundColor3 = c
+        preview.BackgroundColor3 = c
         if cb then cb(c) end
     end
 
-    for _, entry in ipairs(Palette) do
-        local sw = create("TextButton", {BackgroundColor3=entry[2], BorderSizePixel=0, Text="", AutoButtonColor=false, ZIndex=101})
+    for _, entryColor in ipairs(palette) do
+        local sw = create("TextButton", {BackgroundColor3=entryColor, BorderSizePixel=0, Text="", AutoButtonColor=false, ZIndex=101})
         sw.Parent = grid
         addCorner(sw, 8)
         addStroke(sw, Color3.fromRGB(255,255,255), 1)
         sw.MouseButton1Click:Connect(function()
-            set(entry[2])
+            set(entryColor)
             popup.Visible = false
         end)
     end
@@ -898,7 +963,7 @@ local function createColorPicker(parent, title, desc, defaultColor, cb)
     b.MouseButton1Click:Connect(function()
         hideAllPopups()
         local p, s = b.AbsolutePosition, b.AbsoluteSize
-        popup.Position = UDim2.new(0, p.X + s.X - 170, 0, p.Y + s.Y + 4)
+        popup.Position = UDim2.new(0, p.X + s.X - 236, 0, p.Y + s.Y + 4)
         popup.Visible = not popup.Visible
     end)
 
@@ -1509,15 +1574,15 @@ local function drawHealth(rec, x, y, w, h, healthPct)
 
     local hpColor = getHealthColor(healthPct)
     local thickness = math.clamp(State.HealthBarThickness or 4, 1, 12)
-    local backThickness = thickness + 4
-    local glowThickness = thickness + 8
+    local backThickness = thickness + math.max(4, thickness * 0.85)
+    local glowThickness = thickness + math.max(8, thickness * 1.8)
 
     local function setCap(circle, pos, radius, color, transparency)
         circle.Position = pos
         circle.Radius = radius
         circle.Color = color
         circle.Filled = true
-        if transparency then circle.Transparency = transparency end
+        circle.Transparency = transparency or 1
         circle.Visible = true
     end
 
@@ -1529,7 +1594,7 @@ local function drawHealth(rec, x, y, w, h, healthPct)
 
         rec.HealthBackLine.From = from
         rec.HealthBackLine.To = to
-        rec.HealthBackLine.Color = Color3.fromRGB(18, 18, 22)
+        rec.HealthBackLine.Color = Color3.fromRGB(10, 10, 14)
         rec.HealthBackLine.Thickness = backThickness
         rec.HealthBackLine.Visible = true
 
@@ -1550,8 +1615,8 @@ local function drawHealth(rec, x, y, w, h, healthPct)
             rec.HealthGlowLine.Color = hpColor
             rec.HealthGlowLine.Thickness = glowThickness
             rec.HealthGlowLine.Visible = true
-            setCap(rec.HealthGlowCaps[1], from, glowThickness * 0.5, hpColor, 0.12)
-            setCap(rec.HealthGlowCaps[2], fillTo, glowThickness * 0.5, hpColor, 0.12)
+            setCap(rec.HealthGlowCaps[1], from, glowThickness * 0.58, hpColor, 0.14)
+            setCap(rec.HealthGlowCaps[2], fillTo, glowThickness * 0.58, hpColor, 0.14)
         end
     else
         local by = State.HealthBarSide == "Top" and (y - (thickness + 6)) or (y + h + 6)
@@ -1582,8 +1647,8 @@ local function drawHealth(rec, x, y, w, h, healthPct)
             rec.HealthGlowLine.Color = hpColor
             rec.HealthGlowLine.Thickness = glowThickness
             rec.HealthGlowLine.Visible = true
-            setCap(rec.HealthGlowCaps[1], from, glowThickness * 0.5, hpColor, 0.12)
-            setCap(rec.HealthGlowCaps[2], fillTo, glowThickness * 0.5, hpColor, 0.12)
+            setCap(rec.HealthGlowCaps[1], from, glowThickness * 0.58, hpColor, 0.14)
+            setCap(rec.HealthGlowCaps[2], fillTo, glowThickness * 0.58, hpColor, 0.14)
         end
     end
 end
@@ -1806,9 +1871,11 @@ local function buildUI()
 
     local headerLight = create("Frame", {BackgroundColor3=Color3.fromRGB(255,255,255), BorderSizePixel=0, Position=UDim2.new(0,14,0,51), Size=UDim2.new(0,320,0,1), BackgroundTransparency=0.45})
     headerLight.Parent = App.Header
+    App.HeaderLight = headerLight
     addCorner(headerLight, 2)
     local headerBloom = create("Frame", {BackgroundColor3=Color3.fromRGB(255,255,255), BorderSizePixel=0, Position=UDim2.new(0,6,0,46), Size=UDim2.new(0,336,0,10), BackgroundTransparency=0.94})
     headerBloom.Parent = App.Header
+    App.HeaderBloom = headerBloom
     addCorner(headerBloom, 8)
     for _, ch in ipairs(subtitleGlow:GetChildren()) do
         if ch:IsA("TextLabel") then ch.TextTransparency = ch.TextTransparency == 0 and 0.12 or 0.86 end
@@ -2003,9 +2070,35 @@ local function buildPages()
     local settings = makePage("Settings")
 
     local profile = createSection(main, "Profile", "Your Roblox info inside the main tab")
+    local accountCard = controlHolder(profile, 108)
+    local avatar = create("ImageLabel", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,12,0,12), Size=UDim2.new(0,78,0,78), Image=""})
+    avatar.Parent = accountCard
+    registerTheme(avatar, "BackgroundColor3", "Main")
+    addCorner(avatar, 18)
+    addStroke(avatar)
+    task.spawn(function()
+        local ok, image = pcall(function()
+            return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.AvatarThumbnail, Enum.ThumbnailSize.Size420x420)
+        end)
+        if ok and avatar.Parent then
+            avatar.Image = image
+        end
+    end)
+    local profileName = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,14), Size=UDim2.new(1,-114,0,18), Text=LocalPlayer.DisplayName, Font=Enum.Font.GothamBold, TextSize=15, TextXAlignment=Enum.TextXAlignment.Left})
+    profileName.Parent = accountCard
+    registerTheme(profileName, "TextColor3", "Text")
+    local profileUser = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,34), Size=UDim2.new(1,-114,0,16), Text='@' .. LocalPlayer.Name, Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
+    profileUser.Parent = accountCard
+    registerTheme(profileUser, "TextColor3", "Sub")
+    local profileInfo = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,54), Size=UDim2.new(1,-114,0,16), Text='Days: ' .. tostring(LocalPlayer.AccountAge) .. '  |  UserId: ' .. tostring(LocalPlayer.UserId), Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    profileInfo.Parent = accountCard
+    registerTheme(profileInfo, "TextColor3", "Sub")
+    local profileNote = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,72), Size=UDim2.new(1,-114,0,16), Text='Avatar preview + live character window on the right.', Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    profileNote.Parent = accountCard
+    registerTheme(profileNote, "TextColor3", "Sub")
     createParagraph(profile, "Player", "DisplayName: " .. LocalPlayer.DisplayName .. "   |   Username: @" .. LocalPlayer.Name)
     createParagraph(profile, "Account", "AccountAge: " .. tostring(LocalPlayer.AccountAge) .. " days   |   UserId: " .. tostring(LocalPlayer.UserId))
-    createParagraph(profile, "Menu", "Movible, minimizable, closable, hotkey hide, preview window and glow title enabled.")
+    createParagraph(profile, "Menu", "Movible, minimizable, closable, hotkey hide, preview window, color menu and glow title enabled.")
     createButton(profile, "Refresh preview", "Rebuild the character window at the right side", "Refresh", function()
         rebuildPreview()
         notify("Preview", "Character preview refreshed.")
@@ -2074,22 +2167,37 @@ local function buildPages()
     local gridLayout = create("UIGridLayout", {CellSize=UDim2.new(0,178,0,112), CellPadding=UDim2.new(0,8,0,8), SortOrder=Enum.SortOrder.LayoutOrder})
     gridLayout.Parent = App.LobbyGrid
 
-    local set = createSection(settings, "Settings", "Hotkey y configs")
+    local set = createSection(settings, "Settings", "Hotkey, color menu y configs")
+    bindControl("MenuColor", createColorPicker(set, "Menu Color", "Change the menu tint, glow and accent color", State.MenuColor, function(c)
+        State.MenuColor = c
+        rebuildThemeColors()
+    end))
+    bindControl("MenuTextColor", createColorPicker(set, "Text Color", "Change the text color of the menu", State.MenuTextColor, function(c)
+        State.MenuTextColor = c
+        rebuildThemeColors()
+    end))
     bindControl("MenuKey", createKeybind(set, "Menu Hotkey", "Choose the key to hide and show the menu", State.MenuKey, function(v) State.MenuKey = v; refreshMenuState() end))
+    createParagraph(set, "How to save", "1) Write a name in Save Config.  2) Press Save.  3) Choose that same name in Select Config.  4) Press Load when you want to bring it back.")
     bindControl("ConfigName", createTextbox(set, "Save Config", "Escribe el nombre antes de guardar", State.ConfigName, "default", function(v) State.ConfigName = v end))
     bindControl("SelectedConfig", createDropdown(set, "Select Config", "Elige una config guardada", listConfigNames(), State.SelectedConfig, function(v) State.SelectedConfig = v end))
     createButton(set, "Save Config", "Guarda la config actual en archivo json", "Save", function()
         local saved = saveCurrentConfig(State.ConfigName)
         if saved then
+            if App.Controls.ConfigName and App.Controls.ConfigName.Set then
+                App.Controls.ConfigName.Set(saved)
+            end
             if App.Controls.SelectedConfig and App.Controls.SelectedConfig.SetOptions then
                 App.Controls.SelectedConfig.SetOptions(listConfigNames(), saved)
             end
-            notify("Config", "Config guardada: " .. tostring(saved))
+            notify("Config", "Config guardada: " .. tostring(saved) .. ". Luego la ves en Select Config.")
         end
     end)
     createButton(set, "Load Config", "Carga la config seleccionada", "Load", function()
         local loaded = loadSavedConfig(State.SelectedConfig)
         if loaded then
+            if App.Controls.SelectedConfig and App.Controls.SelectedConfig.SetOptions then
+                App.Controls.SelectedConfig.SetOptions(listConfigNames(), loaded)
+            end
             notify("Config", "Config cargada: " .. tostring(loaded))
         end
     end)
