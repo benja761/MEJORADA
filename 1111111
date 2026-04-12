@@ -1881,7 +1881,7 @@ local function buildUI()
         if ch:IsA("TextLabel") then ch.TextTransparency = ch.TextTransparency == 0 and 0.12 or 0.86 end
     end
 
-    local buttons = create("Frame", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-14,0,14), Size=UDim2.new(0,156,0,28)})
+    local buttons = create("Frame", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-14,0,14), Size=UDim2.new(0,96,0,28)})
     buttons.Parent = App.Header
     local bl = create("UIListLayout", {FillDirection=Enum.FillDirection.Horizontal, HorizontalAlignment=Enum.HorizontalAlignment.Right, Padding=UDim.new(0,8)})
     bl.Parent = buttons
@@ -1896,7 +1896,6 @@ local function buildUI()
         return b
     end
     App.MinBtn = topButton("—")
-    App.HideBtn = topButton("H")
     App.CloseBtn = topButton("X")
 
     App.Sidebar = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,12,0,78), Size=UDim2.new(0,220,1,-90)})
@@ -1905,7 +1904,7 @@ local function buildUI()
     addCorner(App.Sidebar, 14)
     addStroke(App.Sidebar)
 
-    local tabs = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,10), Size=UDim2.new(1,-20,1,-20)})
+    local tabs = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,10), Size=UDim2.new(1,-20,1,-106)})
     tabs.Parent = App.Sidebar
     local tl = create("UIListLayout", {Padding=UDim.new(0,8)})
     tl.Parent = tabs
@@ -1919,6 +1918,33 @@ local function buildUI()
         addStroke(b)
         App.TabButtons[name] = b
         b.MouseButton1Click:Connect(function() switchTab(name) end)
+    end
+
+    App.SideFooter = create("Frame", {BackgroundTransparency=1, BorderSizePixel=0, Position=UDim2.new(0,10,1,-88), Size=UDim2.new(1,-20,0,78)})
+    App.SideFooter.Parent = App.Sidebar
+
+    App.DiscordBtn = create("TextButton", {
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0,0,0,0),
+        Size = UDim2.new(1,0,0,30),
+        Text = "Discord",
+        Font = Enum.Font.GothamBold,
+        TextSize = 13,
+        AutoButtonColor = false
+    })
+    App.DiscordBtn.Parent = App.SideFooter
+    registerTheme(App.DiscordBtn, "BackgroundColor3", "Main")
+    registerTheme(App.DiscordBtn, "TextColor3", "Text")
+    addCorner(App.DiscordBtn, 10)
+    addStroke(App.DiscordBtn)
+
+    App.SideFooterDev = createGlowText(App.SideFooter, "Developer : Mono Pistola", UDim2.new(0,2,0,42), UDim2.new(1,-4,0,22), 14, Enum.Font.Arcade, 4)
+    for _, child in ipairs(App.SideFooterDev:GetChildren()) do
+        if child:IsA("TextLabel") then
+            child.TextXAlignment = Enum.TextXAlignment.Left
+            child.TextColor3 = child.TextTransparency == 0 and Color3.fromRGB(180, 180, 188) or Color3.fromRGB(120, 120, 130)
+        end
     end
 
     App.Content = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,244,0,78), Size=UDim2.new(1,-256,1,-90)})
@@ -1935,12 +1961,6 @@ local function buildUI()
     App.Hotkey.Parent = App.Content
     registerTheme(App.Hotkey, "TextColor3", "Sub")
 
-    App.DevTag = createGlowText(App.Gui, "Dev : Monito", UDim2.new(0,18,1,-28), UDim2.new(0,140,0,16), 11, Enum.Font.GothamBold, 3)
-    for _, child in ipairs(App.DevTag:GetChildren()) do
-        if child:IsA("TextLabel") then
-            child.TextColor3 = child.TextTransparency == 0 and Color3.fromRGB(145, 145, 155) or Color3.fromRGB(110, 110, 120)
-        end
-    end
 
     App.PageHolder = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,46), Size=UDim2.new(1,-24,1,-58)})
     App.PageHolder.Parent = App.Content
@@ -2241,12 +2261,27 @@ end
 
 local function hookButtons()
     App.MinBtn.MouseButton1Click:Connect(function() State.Minimized = not State.Minimized; refreshMenuState() end)
-    App.HideBtn.MouseButton1Click:Connect(function() State.MenuVisible = not State.MenuVisible; refreshMenuState() end)
     App.CloseBtn.MouseButton1Click:Connect(function()
         for _, c in ipairs(App.Connections) do safeDisconnect(c) end
         for target in pairs(App.ESP) do removeESPRecord(target) end
         clearPreview()
         App.Gui:Destroy()
+    end)
+
+    App.DiscordBtn.MouseButton1Click:Connect(function()
+        local link = "https://discord.gg/kpkBywsrpD"
+        local copied = false
+        pcall(function()
+            if setclipboard then
+                setclipboard(link)
+                copied = true
+            end
+        end)
+        if copied then
+            notify("Discord", "Link copiado al portapapeles.")
+        else
+            notify("Discord", link)
+        end
     end)
 
     table.insert(App.Connections, UserInputService.InputBegan:Connect(function(input, gp)
