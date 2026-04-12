@@ -6,6 +6,7 @@ local CoreGui = game:GetService("CoreGui")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
+local GuiService = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -1141,14 +1142,14 @@ local function createESPRecord(target)
     local nameShadow = Drawing.new("Text")
     nameShadow.Visible = false
     nameShadow.Center = true
-    nameShadow.Outline = true
+    nameShadow.Outline = false
     nameShadow.Font = 2
     nameShadow.Transparency = 0.55
 
     local nameText = Drawing.new("Text")
     nameText.Visible = false
     nameText.Center = true
-    nameText.Outline = true
+    nameText.Outline = false
     nameText.Font = 2
 
     App.ESP[target] = {
@@ -1174,6 +1175,7 @@ local function createESPRecord(target)
         HeadCircle = headCircle,
         NameShadow = nameShadow,
         NameText = nameText,
+        NameCache = {Text = "", Size = -1, X = -9999, Y = -9999, R = -1, G = -1, B = -1},
     }
     return App.ESP[target]
 end
@@ -1548,18 +1550,30 @@ local function drawName(rec, displayText, x, y, w, color, enabled)
     if not enabled then return end
 
     local size = math.clamp(tonumber(State.ESPNameSize) or 13, 10, 28)
-    local pos = Vector2.new(x + (w * 0.5), y - size - 2)
+    local posX = x + (w * 0.5)
+    local posY = y - size - 1
+    local cache = rec.NameCache or {Text = "", Size = -1, X = -9999, Y = -9999, R = -1, G = -1, B = -1}
+    rec.NameCache = cache
 
-    rec.NameShadow.Text = displayText
-    rec.NameShadow.Size = size + 1
-    rec.NameShadow.Position = pos + Vector2.new(1, 1)
-    rec.NameShadow.Color = Color3.fromRGB(8, 8, 10)
-    rec.NameShadow.Visible = true
-
-    rec.NameText.Text = displayText
-    rec.NameText.Size = size
-    rec.NameText.Position = pos
-    rec.NameText.Color = color
+    if cache.Text ~= displayText then
+        rec.NameText.Text = displayText
+        cache.Text = displayText
+    end
+    if cache.Size ~= size then
+        rec.NameText.Size = size
+        cache.Size = size
+    end
+    if math.abs(cache.X - posX) > 0.5 or math.abs(cache.Y - posY) > 0.5 then
+        rec.NameText.Position = Vector2.new(posX, posY)
+        cache.X = posX
+        cache.Y = posY
+    end
+    local r, g, b = math.floor(color.R * 255 + 0.5), math.floor(color.G * 255 + 0.5), math.floor(color.B * 255 + 0.5)
+    if cache.R ~= r or cache.G ~= g or cache.B ~= b then
+        rec.NameText.Color = color
+        cache.R, cache.G, cache.B = r, g, b
+    end
+    rec.NameText.Transparency = 1
     rec.NameText.Visible = true
 end
 
@@ -1576,15 +1590,6 @@ local function drawHealth(rec, x, y, w, h, healthPct)
     local thickness = math.clamp(State.HealthBarThickness or 4, 1, 12)
     local backThickness = thickness + math.max(4, thickness * 0.85)
     local glowThickness = thickness + math.max(8, thickness * 1.8)
-
-    local function setCap(circle, pos, radius, color, transparency)
-        circle.Position = pos
-        circle.Radius = radius
-        circle.Color = color
-        circle.Filled = true
-        circle.Transparency = transparency or 1
-        circle.Visible = true
-    end
 
     if State.HealthBarSide == "Left" or State.HealthBarSide == "Right" then
         local bx = State.HealthBarSide == "Left" and (x - (thickness + 6)) or (x + w + 6)
@@ -1604,19 +1609,12 @@ local function drawHealth(rec, x, y, w, h, healthPct)
         rec.HealthLine.Thickness = thickness
         rec.HealthLine.Visible = true
 
-        setCap(rec.HealthBackCaps[1], from, backThickness * 0.5, Color3.fromRGB(18, 18, 22))
-        setCap(rec.HealthBackCaps[2], to, backThickness * 0.5, Color3.fromRGB(18, 18, 22))
-        setCap(rec.HealthFillCaps[1], from, thickness * 0.5, hpColor)
-        setCap(rec.HealthFillCaps[2], fillTo, thickness * 0.5, hpColor)
-
         if State.ESPGlow then
             rec.HealthGlowLine.From = from
             rec.HealthGlowLine.To = fillTo
             rec.HealthGlowLine.Color = hpColor
             rec.HealthGlowLine.Thickness = glowThickness
             rec.HealthGlowLine.Visible = true
-            setCap(rec.HealthGlowCaps[1], from, glowThickness * 0.58, hpColor, 0.14)
-            setCap(rec.HealthGlowCaps[2], fillTo, glowThickness * 0.58, hpColor, 0.14)
         end
     else
         local by = State.HealthBarSide == "Top" and (y - (thickness + 6)) or (y + h + 6)
@@ -1636,19 +1634,12 @@ local function drawHealth(rec, x, y, w, h, healthPct)
         rec.HealthLine.Thickness = thickness
         rec.HealthLine.Visible = true
 
-        setCap(rec.HealthBackCaps[1], from, backThickness * 0.5, Color3.fromRGB(18, 18, 22))
-        setCap(rec.HealthBackCaps[2], to, backThickness * 0.5, Color3.fromRGB(18, 18, 22))
-        setCap(rec.HealthFillCaps[1], from, thickness * 0.5, hpColor)
-        setCap(rec.HealthFillCaps[2], fillTo, thickness * 0.5, hpColor)
-
         if State.ESPGlow then
             rec.HealthGlowLine.From = from
             rec.HealthGlowLine.To = fillTo
             rec.HealthGlowLine.Color = hpColor
             rec.HealthGlowLine.Thickness = glowThickness
             rec.HealthGlowLine.Visible = true
-            setCap(rec.HealthGlowCaps[1], from, glowThickness * 0.58, hpColor, 0.14)
-            setCap(rec.HealthGlowCaps[2], fillTo, glowThickness * 0.58, hpColor, 0.14)
         end
     end
 end
@@ -2270,16 +2261,22 @@ local function hookButtons()
 
     App.DiscordBtn.MouseButton1Click:Connect(function()
         local link = "https://discord.gg/kpkBywsrpD"
-        local copied = false
+        local opened = false
         pcall(function()
-            if setclipboard then
-                setclipboard(link)
-                copied = true
+            if GuiService and GuiService.OpenBrowserWindow then
+                GuiService:OpenBrowserWindow(link)
+                opened = true
             end
         end)
-        if copied then
-            notify("Discord", "Link copiado al portapapeles.")
-        else
+        if not opened then
+            pcall(function()
+                if GuiService and GuiService.OpenNativeOverlay then
+                    GuiService:OpenNativeOverlay(link)
+                    opened = true
+                end
+            end)
+        end
+        if not opened then
             notify("Discord", link)
         end
     end)
