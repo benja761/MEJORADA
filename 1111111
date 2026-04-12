@@ -2388,33 +2388,47 @@ buildPages()
 if App.Controls.SelectedConfig and App.Controls.SelectedConfig.SetOptions then
     App.Controls.SelectedConfig.SetOptions(listConfigNames(), State.SelectedConfig)
 end
-refreshLobbyCards()
 switchTab("Main")
 hookDrag()
 hookButtons()
-startLoop()
 
 App.Root.Visible = false
 App.PreviewWindow.Visible = false
 updateFOV()
 
-notify("Loaded", "Intro will finish in 5 seconds.")
+local introFinished = false
+local function finishIntro()
+    if introFinished then return end
+    introFinished = true
 
-task.delay(5, function()
     if App.Intro and App.Intro.Parent then
-        tween(App.Intro, 0.35, {BackgroundTransparency = 1})
+        tween(App.Intro, 0.18, {BackgroundTransparency = 1})
         for _, desc in ipairs(App.Intro:GetDescendants()) do
             if desc:IsA("TextLabel") then
-                tween(desc, 0.35, {TextTransparency = 1})
+                tween(desc, 0.18, {TextTransparency = 1})
             end
         end
-        task.wait(0.4)
-        if App.Intro and App.Intro.Parent then App.Intro:Destroy() end
+        task.wait(0.2)
+        if App.Intro and App.Intro.Parent then
+            App.Intro:Destroy()
+        end
     end
+
     State.MenuVisible = true
     refreshTargetCache()
-    refreshLobbyCards()
     refreshMenuState()
     App.Root.Visible = true
+    startLoop()
     notify("Nexhidera", "Menu loaded correctly.")
+end
+
+table.insert(App.Connections, UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if not introFinished and (input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.Return or input.UserInputType == Enum.UserInputType.MouseButton1) then
+        finishIntro()
+    end
+end))
+
+task.delay(1.2, function()
+    finishIntro()
 end)
