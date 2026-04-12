@@ -1,1458 +1,1158 @@
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-if not LocalPlayer or not Camera then
-    return
-end
+if not LocalPlayer or not Camera then return end
 
 pcall(function()
-    local old = PlayerGui:FindFirstChild("NexhideraVisualPanel")
-    if old then
-        old:Destroy()
-    end
+    local old = CoreGui:FindFirstChild("NexhideraUI")
+    if old then old:Destroy() end
 end)
 
 local App = {
-    Pages = {},
-    TabButtons = {},
-    Records = {},
-    Connections = {},
-    VisibleEntries = {},
-    CandidateCache = {
-        Players = {},
-        NPCs = {},
-        LastRefresh = 0,
+    Theme = {
+        Main = Color3.fromRGB(11, 11, 14),
+        Panel = Color3.fromRGB(18, 18, 22),
+        Panel2 = Color3.fromRGB(24, 24, 30),
+        Stroke = Color3.fromRGB(45, 45, 54),
+        Text = Color3.fromRGB(255, 255, 255),
+        Sub = Color3.fromRGB(184, 184, 196),
+        Accent = Color3.fromRGB(245, 245, 255),
+        AccentSoft = Color3.fromRGB(200, 200, 230)
     },
+    TabButtons = {},
+    Pages = {},
+    ThemeRefs = {},
+    ESP = {},
+    Connections = {},
+    SearchEntries = {},
+    PreviewEnabled = false,
 }
 
 local State = {
     MenuVisible = true,
-    MenuMinimized = false,
+    Minimized = false,
     MenuKey = Enum.KeyCode.RightShift,
 
-    ESPEnabled = true,
-    ShowPlayers = true,
-    ShowNPCs = true,
-    ShowNames = true,
-    ShowDistance = true,
-    ShowLines = true,
-    LineOrigin = "Bottom",
-    BoxMode = "Corner",
-    ShowHealthBar = true,
-    HealthBarSide = "Left",
+    ESPEnabled = false,
+    ESPPlayers = true,
+    ESPNPCs = true,
+    ESPDistance = 500,
     ESPColor = Color3.fromRGB(255, 255, 255),
-    MaxDistance = 350,
+    ESPStyle = "Corner",
+    Tracers = false,
+    TracerOrigin = "Bottom",
+    HealthBar = false,
+    HealthBarSide = "Left",
+    CharacterPreview = false,
+
+    CombatEnabled = false,
+    ShowFOV = false,
+    FOV = 150,
+    Smooth = 0,
+    AimPart = "Head",
 }
 
-local Themes = {
-    Main = Color3.fromRGB(10, 10, 12),
-    Panel = Color3.fromRGB(18, 18, 22),
-    Section = Color3.fromRGB(24, 24, 30),
-    Stroke = Color3.fromRGB(55, 55, 65),
-    Text = Color3.fromRGB(255, 255, 255),
-    Sub = Color3.fromRGB(180, 180, 190),
-    Accent = Color3.fromRGB(255, 255, 255),
-}
-
-local ColorChoices = {
-    {"White", Color3.fromRGB(255,255,255)},
-    {"Red", Color3.fromRGB(255,90,90)},
-    {"Green", Color3.fromRGB(90,255,140)},
-    {"Blue", Color3.fromRGB(90,160,255)},
-    {"Purple", Color3.fromRGB(170,85,255)},
-    {"Yellow", Color3.fromRGB(255,220,90)},
+local Palette = {
+    {"White", Color3.fromRGB(255,255,255)}, {"Red", Color3.fromRGB(255,90,90)},
+    {"Orange", Color3.fromRGB(255,160,85)}, {"Yellow", Color3.fromRGB(255,220,90)},
+    {"Green", Color3.fromRGB(110,255,145)}, {"Mint", Color3.fromRGB(100,255,210)},
+    {"Blue", Color3.fromRGB(100,170,255)}, {"Purple", Color3.fromRGB(185,120,255)},
+    {"Pink", Color3.fromRGB(255,120,210)}, {"Gray", Color3.fromRGB(200,200,200)},
+    {"Black", Color3.fromRGB(35,35,35)}, {"Cyan", Color3.fromRGB(90,240,255)}
 }
 
 local function create(className, props)
-    local obj = Instance.new(className)
+    local inst = Instance.new(className)
     for k, v in pairs(props or {}) do
-        obj[k] = v
+        inst[k] = v
     end
-    return obj
+    return inst
 end
 
-local function addCorner(obj, radius)
+local function round(n, step)
+    step = step or 1
+    return math.floor((n / step) + 0.5) * step
+end
+
+local function addCorner(obj, r)
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 8)
+    c.CornerRadius = UDim.new(0, r or 10)
     c.Parent = obj
     return c
 end
 
 local function addStroke(obj, color, thickness)
     local s = Instance.new("UIStroke")
-    s.Color = color or Themes.Stroke
+    s.Color = color or App.Theme.Stroke
     s.Thickness = thickness or 1
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     s.Parent = obj
     return s
 end
 
-local function addPadding(obj, left, right, top, bottom)
+local function addPadding(obj, l, r, t, b)
     local p = Instance.new("UIPadding")
-    p.PaddingLeft = UDim.new(0, left or 0)
-    p.PaddingRight = UDim.new(0, right or left or 0)
-    p.PaddingTop = UDim.new(0, top or left or 0)
-    p.PaddingBottom = UDim.new(0, bottom or top or left or 0)
+    p.PaddingLeft = UDim.new(0, l or 0)
+    p.PaddingRight = UDim.new(0, r or l or 0)
+    p.PaddingTop = UDim.new(0, t or l or 0)
+    p.PaddingBottom = UDim.new(0, b or t or l or 0)
     p.Parent = obj
     return p
 end
 
-local function safeDisconnect(conn)
-    if conn and typeof(conn) == "RBXScriptConnection" then
-        conn:Disconnect()
-    end
-end
-
 local function tween(obj, time, props)
-    local tw = TweenService:Create(obj, TweenInfo.new(time or 0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
+    local tw = TweenService:Create(obj, TweenInfo.new(time, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
     tw:Play()
     return tw
 end
 
-local function getViewportCenter()
-    local size = Camera.ViewportSize
-    return Vector2.new(size.X / 2, size.Y / 2), size
+local function safeDisconnect(c)
+    if c and typeof(c) == "RBXScriptConnection" then c:Disconnect() end
 end
 
-local function getRoot(model)
-    if not model then
-        return nil
+local function registerTheme(inst, prop, key)
+    App.ThemeRefs[#App.ThemeRefs + 1] = {inst, prop, key}
+    inst[prop] = App.Theme[key]
+end
+
+local function applyTheme()
+    for _, item in ipairs(App.ThemeRefs) do
+        if item[1] and item[1].Parent then
+            pcall(function() item[1][item[2]] = App.Theme[item[3]] end)
+        end
     end
-    if model:IsA("BasePart") then
-        return model
-    end
-    if model:IsA("Model") then
-        return model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
-    end
-    return nil
+end
+
+local function getCharacter()
+    return LocalPlayer.Character
 end
 
 local function getHumanoid(model)
-    if model and model:IsA("Model") then
-        return model:FindFirstChildOfClass("Humanoid")
-    end
-    return nil
+    return model and model:FindFirstChildOfClass("Humanoid")
 end
 
-local function getLocalRoot()
-    local char = LocalPlayer.Character
-    return char and char:FindFirstChild("HumanoidRootPart") or nil
+local function getRoot(model)
+    if not model then return nil end
+    if model:IsA("Model") then
+        return model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or model:FindFirstChild("Head")
+    elseif model:IsA("BasePart") then
+        return model
+    end
 end
 
-local function getDistanceFromLocal(pos)
-    local root = getLocalRoot()
-    if not root then
-        return math.huge
-    end
+local function localRoot()
+    return getRoot(getCharacter())
+end
+
+local function distanceTo(pos)
+    local root = localRoot()
+    if not root then return math.huge end
     return (root.Position - pos).Magnitude
 end
 
-local function getColorByChoice(name)
-    for _, item in ipairs(ColorChoices) do
-        if item[1] == name then
-            return item[2]
-        end
-    end
-    return Themes.Accent
+local function isAliveModel(model)
+    local hum = getHumanoid(model)
+    return hum and hum.Health > 0
 end
 
-local function getHealthColor(percent)
-    percent = math.clamp(percent, 0, 1)
-    if percent >= 0.5 then
-        local t = (percent - 0.5) / 0.5
-        return Color3.fromRGB(math.floor(255 * (1 - t)), 255, 80)
-    else
-        local t = percent / 0.5
-        return Color3.fromRGB(255, math.floor(255 * t), 80)
-    end
-end
-
-local function createLine(parent, thickness)
-    local f = create("Frame", {
-        Parent = parent,
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        BorderSizePixel = 0,
-        BackgroundColor3 = State.ESPColor,
-        Visible = false,
-        ZIndex = 4,
-    })
-    addCorner(f, 999)
-    f.Size = UDim2.fromOffset(10, thickness or 2)
-    return f
-end
-
-local function createText(parent, zIndex)
-    return create("TextLabel", {
-        Parent = parent,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        TextColor3 = Themes.Text,
-        TextStrokeTransparency = 0,
-        TextStrokeColor3 = Color3.new(0,0,0),
-        Font = Enum.Font.GothamBold,
-        TextSize = 12,
-        Visible = false,
-        ZIndex = zIndex or 5,
-        AnchorPoint = Vector2.new(0.5, 1),
-        Size = UDim2.fromOffset(220, 16),
-        Text = "",
-    })
-end
-
-local function setFrameRect(frame, x, y, w, h)
-    frame.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
-    frame.Size = UDim2.fromOffset(math.max(1, math.floor(w)), math.max(1, math.floor(h)))
-end
-
-local function setLineFromTo(line, fromPos, toPos, thickness)
-    local dx = toPos.X - fromPos.X
-    local dy = toPos.Y - fromPos.Y
-    local dist = math.sqrt(dx * dx + dy * dy)
-    line.Size = UDim2.fromOffset(math.max(1, dist), thickness or 2)
-    line.Position = UDim2.fromOffset((fromPos.X + toPos.X) / 2, (fromPos.Y + toPos.Y) / 2)
-    line.Rotation = math.deg(math.atan2(dy, dx))
-    line.Visible = true
-end
-
-local function getScreenBoundingBox(model)
-    if not model or not model.Parent then
-        return nil
-    end
-
-    local cf, size = model:GetBoundingBox()
-    if size.Magnitude <= 0 then
-        return nil
-    end
-
-    local hx, hy, hz = size.X * 0.5, size.Y * 0.5, size.Z * 0.5
-    local corners = {
-        Vector3.new(-hx, -hy, -hz), Vector3.new(-hx, -hy, hz),
-        Vector3.new(-hx, hy, -hz),  Vector3.new(-hx, hy, hz),
-        Vector3.new(hx, -hy, -hz),  Vector3.new(hx, -hy, hz),
-        Vector3.new(hx, hy, -hz),   Vector3.new(hx, hy, hz),
-    }
-
-    local minX, minY = math.huge, math.huge
-    local maxX, maxY = -math.huge, -math.huge
-    local anyVisible = false
-    local anyFront = false
-
-    for _, offset in ipairs(corners) do
-        local world = cf:PointToWorldSpace(offset)
-        local view, onScreen = Camera:WorldToViewportPoint(world)
-        if view.Z > 0 then
-            anyFront = true
-            minX = math.min(minX, view.X)
-            minY = math.min(minY, view.Y)
-            maxX = math.max(maxX, view.X)
-            maxY = math.max(maxY, view.Y)
-            if onScreen then
-                anyVisible = true
-            end
-        end
-    end
-
-    if not anyFront or not anyVisible then
-        return nil
-    end
-
-    local width = maxX - minX
-    local height = maxY - minY
-    if width < 2 or height < 2 then
-        return nil
-    end
-
-    return {
-        X = minX,
-        Y = minY,
-        Width = width,
-        Height = height,
-        Center = Vector2.new(minX + width * 0.5, minY + height * 0.5),
-    }
+local function worldToViewport(pos)
+    return Camera:WorldToViewportPoint(pos)
 end
 
 local function getTracerOrigin()
-    local center, viewport = getViewportCenter()
-    if State.LineOrigin == "Top" then
-        return Vector2.new(center.X, 0)
-    elseif State.LineOrigin == "Center" then
-        return center
+    local size = Camera.ViewportSize
+    if State.TracerOrigin == "Top" then
+        return Vector2.new(size.X/2, 0)
+    elseif State.TracerOrigin == "Center" then
+        return Vector2.new(size.X/2, size.Y/2)
     end
-    return Vector2.new(center.X, viewport.Y)
+    return Vector2.new(size.X/2, size.Y)
 end
 
-local function hideRecord(record)
-    if not record then
-        return
-    end
-    record.Box.Visible = false
-    record.BoxStroke.Enabled = false
-    for _, corner in ipairs(record.Corners) do
-        corner.Visible = false
-    end
-    record.Name.Visible = false
-    record.Info.Visible = false
-    record.Tracer.Visible = false
-    record.HealthBack.Visible = false
-    record.HealthFill.Visible = false
+local function getTargetPart(model)
+    return model:FindFirstChild(State.AimPart) or model:FindFirstChild("Head") or getRoot(model)
 end
 
-local function makeRecord(id)
+local function getCharacterBounds(model)
+    local cf, size = model:GetBoundingBox()
+    local pos = cf.Position
+    local top = select(1, worldToViewport(pos + Vector3.new(0, size.Y/2, 0)))
+    local bottom = select(1, worldToViewport(pos - Vector3.new(0, size.Y/2, 0)))
+    return cf, size, top, bottom
+end
+
+local function createGlowText(parent, text, pos, size, textSize, font, z)
     local holder = create("Frame", {
-        Parent = App.Overlay,
         BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Size = UDim2.fromScale(1,1),
-        Name = "ESP_" .. tostring(id),
+        Position = pos,
+        Size = size,
+        ZIndex = z or 5
     })
+    holder.Parent = parent
 
-    local box = create("Frame", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Visible = false,
-        ZIndex = 4,
-    })
-    local boxStroke = addStroke(box, State.ESPColor, 1.4)
-
-    local corners = {}
-    for i = 1, 8 do
-        local c = create("Frame", {
-            Parent = holder,
-            BorderSizePixel = 0,
-            BackgroundColor3 = State.ESPColor,
-            Visible = false,
-            ZIndex = 4,
-        })
-        table.insert(corners, c)
-    end
-
-    local healthBack = create("Frame", {
-        Parent = holder,
-        BorderSizePixel = 0,
-        BackgroundColor3 = Color3.fromRGB(15,15,15),
-        Visible = false,
-        ZIndex = 3,
-    })
-    local healthFill = create("Frame", {
-        Parent = holder,
-        BorderSizePixel = 0,
-        BackgroundColor3 = Color3.fromRGB(80,255,120),
-        Visible = false,
-        ZIndex = 4,
-    })
-
-    local name = createText(holder, 5)
-    local info = createText(holder, 5)
-    local tracer = createLine(holder, 2)
-
-    local record = {
-        Holder = holder,
-        Box = box,
-        BoxStroke = boxStroke,
-        Corners = corners,
-        HealthBack = healthBack,
-        HealthFill = healthFill,
-        Name = name,
-        Info = info,
-        Tracer = tracer,
+    local offsets = {
+        Vector2.new(0,0), Vector2.new(1,0), Vector2.new(-1,0), Vector2.new(0,1), Vector2.new(0,-1),
+        Vector2.new(2,0), Vector2.new(-2,0), Vector2.new(0,2), Vector2.new(0,-2)
     }
-    App.Records[id] = record
-    return record
+
+    for i, off in ipairs(offsets) do
+        local glow = create("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, off.X, 0, off.Y),
+            Size = UDim2.new(1,0,1,0),
+            Text = text,
+            Font = font,
+            TextSize = textSize,
+            TextTransparency = i == 1 and 0 or 0.72,
+            TextColor3 = i == 1 and App.Theme.Text or App.Theme.Accent,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Center,
+            ZIndex = z or 5
+        })
+        glow.Parent = holder
+    end
+    return holder
 end
 
-local function getOrCreateRecord(id)
-    return App.Records[id] or makeRecord(id)
-end
+local function notify(title, body)
+    if not App.NotificationHolder then return end
+    local card = create("Frame", {
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1,0,0,0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        ClipsDescendants = true
+    })
+    card.Parent = App.NotificationHolder
+    registerTheme(card, "BackgroundColor3", "Panel")
+    addCorner(card, 12)
+    addStroke(card)
 
-local function removeRecord(id)
-    local record = App.Records[id]
-    if record then
-        record.Holder:Destroy()
-        App.Records[id] = nil
-    end
-end
+    local line = create("Frame", {BackgroundColor3 = App.Theme.Accent, BorderSizePixel = 0, Size = UDim2.new(0,3,1,0)})
+    line.Parent = card
+    addCorner(line, 6)
 
-local function drawCorners(record, x, y, w, h, color)
-    local thickness = math.max(2, math.floor(math.min(w, h) * 0.03))
-    local len = math.max(10, math.floor(math.min(w, h) * 0.22))
+    local wrap = create("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0,12,0,10), Size = UDim2.new(1,-24,0,0), AutomaticSize = Enum.AutomaticSize.Y})
+    wrap.Parent = card
+    local lay = create("UIListLayout", {Padding = UDim.new(0,4)})
+    lay.Parent = wrap
 
-    local c = record.Corners
-    for _, frame in ipairs(c) do
-        frame.BackgroundColor3 = color
-        frame.Visible = true
-    end
+    local t = create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,18), Text=title, Font=Enum.Font.GothamBold, TextSize=14, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = wrap
+    registerTheme(t, "TextColor3", "Text")
 
-    setFrameRect(c[1], x, y, len, thickness)
-    setFrameRect(c[2], x, y, thickness, len)
+    local b = create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,0), AutomaticSize=Enum.AutomaticSize.Y, TextWrapped=true, Text=body, Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left, TextYAlignment=Enum.TextYAlignment.Top})
+    b.Parent = wrap
+    registerTheme(b, "TextColor3", "Sub")
 
-    setFrameRect(c[3], x + w - len, y, len, thickness)
-    setFrameRect(c[4], x + w - thickness, y, thickness, len)
-
-    setFrameRect(c[5], x, y + h - thickness, len, thickness)
-    setFrameRect(c[6], x, y + h - len, thickness, len)
-
-    setFrameRect(c[7], x + w - len, y + h - thickness, len, thickness)
-    setFrameRect(c[8], x + w - thickness, y + h - len, thickness, len)
-end
-
-local function clearCorners(record)
-    for _, frame in ipairs(record.Corners) do
-        frame.Visible = false
-    end
-end
-
-local function drawHealthBar(record, x, y, w, h, humanoid)
-    record.HealthBack.Visible = false
-    record.HealthFill.Visible = false
-    if not State.ShowHealthBar or not humanoid or humanoid.MaxHealth <= 0 then
-        return
-    end
-
-    local pct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-    local color = getHealthColor(pct)
-    local side = State.HealthBarSide
-
-    if side == "Left" then
-        setFrameRect(record.HealthBack, x - 6, y, 3, h)
-        setFrameRect(record.HealthFill, x - 6, y + (h * (1 - pct)), 3, h * pct)
-    elseif side == "Right" then
-        setFrameRect(record.HealthBack, x + w + 3, y, 3, h)
-        setFrameRect(record.HealthFill, x + w + 3, y + (h * (1 - pct)), 3, h * pct)
-    elseif side == "Top" then
-        setFrameRect(record.HealthBack, x, y - 6, w, 3)
-        setFrameRect(record.HealthFill, x, y - 6, w * pct, 3)
-    else
-        setFrameRect(record.HealthBack, x, y + h + 3, w, 3)
-        setFrameRect(record.HealthFill, x, y + h + 3, w * pct, 3)
-    end
-
-    record.HealthFill.BackgroundColor3 = color
-    record.HealthBack.Visible = true
-    record.HealthFill.Visible = true
-end
-
-local function updateRecord(targetId, model, kind)
-    local record = getOrCreateRecord(targetId)
-
-    if not State.ESPEnabled or not model or not model.Parent then
-        hideRecord(record)
-        return false
-    end
-
-    local root = getRoot(model)
-    local hum = getHumanoid(model)
-    if not root then
-        hideRecord(record)
-        return false
-    end
-
-    if hum and hum.Health <= 0 then
-        hideRecord(record)
-        return false
-    end
-
-    local distance = getDistanceFromLocal(root.Position)
-    if distance > State.MaxDistance then
-        hideRecord(record)
-        return false
-    end
-
-    local box = getScreenBoundingBox(model)
-    if not box then
-        hideRecord(record)
-        return false
-    end
-
-    local color = State.ESPColor
-    local x, y, w, h = box.X, box.Y, box.Width, box.Height
-
-    if State.BoxMode == "Box" then
-        setFrameRect(record.Box, x, y, w, h)
-        record.Box.Visible = true
-        record.BoxStroke.Enabled = true
-        record.BoxStroke.Color = color
-        clearCorners(record)
-    else
-        record.Box.Visible = false
-        record.BoxStroke.Enabled = false
-        drawCorners(record, x, y, w, h, color)
-    end
-
-    record.Name.Text = model.Name
-    record.Name.Position = UDim2.fromOffset(x + (w * 0.5), y - 2)
-    record.Name.Visible = State.ShowNames
-
-    if State.ShowDistance then
-        record.Info.Text = string.format("%s • %dm", kind, math.floor(distance))
-        record.Info.Position = UDim2.fromOffset(x + (w * 0.5), y + h + 16)
-        record.Info.Visible = true
-    else
-        record.Info.Visible = false
-    end
-
-    if State.ShowLines then
-        local fromPos = getTracerOrigin()
-        local toPos = Vector2.new(x + w * 0.5, y + h)
-        record.Tracer.BackgroundColor3 = color
-        setLineFromTo(record.Tracer, fromPos, toPos, 2)
-    else
-        record.Tracer.Visible = false
-    end
-
-    drawHealthBar(record, x, y, w, h, hum)
-
-    return true
-end
-
-local function getNPCModels()
-    local results = {}
-    local added = {}
-
-    local tagNames = {"NPC", "Enemy", "Mob", "DebugNPC", "Bot"}
-    for _, tag in ipairs(tagNames) do
-        local tagged = CollectionService:GetTagged(tag)
-        for _, item in ipairs(tagged) do
-            if item:IsA("Model") and getHumanoid(item) and not added[item] then
-                added[item] = true
-                table.insert(results, item)
-            end
+    task.defer(function()
+        tween(card, 0.2, {Size = UDim2.new(1,0,0,wrap.AbsoluteSize.Y + 18)})
+    end)
+    task.delay(3.4, function()
+        if card.Parent then
+            tween(card, 0.18, {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0)})
+            task.wait(0.22)
+            if card.Parent then card:Destroy() end
         end
-    end
-
-    local folders = {"NPCs", "Enemies", "Mobs", "Bots", "Monsters"}
-    for _, folderName in ipairs(folders) do
-        local folder = Workspace:FindFirstChild(folderName)
-        if folder then
-            for _, desc in ipairs(folder:GetDescendants()) do
-                if desc:IsA("Model") and getHumanoid(desc) and not Players:GetPlayerFromCharacter(desc) and not added[desc] then
-                    added[desc] = true
-                    table.insert(results, desc)
-                end
-            end
-        end
-    end
-
-    return results
+    end)
 end
 
-local function refreshCandidates(force)
-    local now = tick()
-    if not force and now - App.CandidateCache.LastRefresh < 1 then
-        return
-    end
-    App.CandidateCache.LastRefresh = now
-
-    local playerModels = {}
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and getRoot(player.Character) then
-            table.insert(playerModels, player.Character)
-        end
-    end
-
-    App.CandidateCache.Players = playerModels
-    App.CandidateCache.NPCs = getNPCModels()
-end
-
-local function cleanupUnused(alive)
-    for id in pairs(App.Records) do
-        if not alive[id] then
-            removeRecord(id)
+local function hideAllPopups()
+    if App.Popups then
+        for _, p in ipairs(App.Popups) do
+            if p and p.Parent then p.Visible = false end
         end
     end
 end
 
-local function updateESP()
-    refreshCandidates(false)
-
-    local alive = {}
-
-    if State.ShowPlayers then
-        for _, model in ipairs(App.CandidateCache.Players) do
-            local id = "player_" .. model:GetFullName()
-            if updateRecord(id, model, "Player") then
-                alive[id] = true
-            end
-        end
-    end
-
-    if State.ShowNPCs then
-        for _, model in ipairs(App.CandidateCache.NPCs) do
-            local id = "npc_" .. model:GetFullName()
-            if updateRecord(id, model, "NPC") then
-                alive[id] = true
-            end
-        end
-    end
-
-    cleanupUnused(alive)
+local function makePopup(width, height)
+    App.Popups = App.Popups or {}
+    local popup = create("Frame", {
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, width, 0, height),
+        Visible = false,
+        ZIndex = 100
+    })
+    popup.Parent = App.Gui
+    registerTheme(popup, "BackgroundColor3", "Panel")
+    addCorner(popup, 12)
+    addStroke(popup)
+    table.insert(App.Popups, popup)
+    return popup
 end
 
-local function createPage(name)
+local function createSection(parent, title, desc)
+    local box = create("Frame", {
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1,0,0,0),
+        AutomaticSize = Enum.AutomaticSize.Y
+    })
+    box.Parent = parent
+    registerTheme(box, "BackgroundColor3", "Panel")
+    addCorner(box, 14)
+    addStroke(box)
+
+    local header = create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,48)})
+    header.Parent = box
+    local t = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,8), Size=UDim2.new(1,-24,0,18), Text=title, Font=Enum.Font.GothamBold, TextSize=14, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = header
+    registerTheme(t, "TextColor3", "Text")
+    local d = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,25), Size=UDim2.new(1,-24,0,16), Text=desc, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    d.Parent = header
+    registerTheme(d, "TextColor3", "Sub")
+
+    local line = create("Frame", {BorderSizePixel=0, Position=UDim2.new(0,12,0,47), Size=UDim2.new(1,-24,0,1)})
+    line.Parent = box
+    registerTheme(line, "BackgroundColor3", "Stroke")
+
+    local body = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,0,0,48), Size=UDim2.new(1,0,0,0), AutomaticSize=Enum.AutomaticSize.Y})
+    body.Parent = box
+    local lay = create("UIListLayout", {Padding = UDim.new(0,8)})
+    lay.Parent = body
+    addPadding(body, 12,12,10,12)
+    return body
+end
+
+local function controlHolder(parent, h)
+    local frame = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, Size=UDim2.new(1,0,0,h or 46)})
+    frame.Parent = parent
+    registerTheme(frame, "BackgroundColor3", "Panel2")
+    addCorner(frame, 10)
+    addStroke(frame)
+    return frame
+end
+
+local function createParagraph(parent, title, body)
+    local h = controlHolder(parent, 64)
+    local t = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,8), Size=UDim2.new(1,-24,0,16), Text=title, Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = h
+    registerTheme(t, "TextColor3", "Text")
+    local d = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,26), Size=UDim2.new(1,-24,0,30), Text=body, TextWrapped=true, Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left, TextYAlignment=Enum.TextYAlignment.Top})
+    d.Parent = h
+    registerTheme(d, "TextColor3", "Sub")
+    return h
+end
+
+local function createToggle(parent, title, desc, default, cb)
+    local h = controlHolder(parent, 46)
+    local t = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,7), Size=UDim2.new(1,-84,0,16), Text=title, Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = h
+    registerTheme(t, "TextColor3", "Text")
+    local d = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,23), Size=UDim2.new(1,-84,0,14), Text=desc, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    d.Parent = h
+    registerTheme(d, "TextColor3", "Sub")
+
+    local btn = create("TextButton", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,44,0,22), Text="", AutoButtonColor=false, BorderSizePixel=0})
+    btn.Parent = h
+    registerTheme(btn, "BackgroundColor3", "Main")
+    addCorner(btn, 99)
+    addStroke(btn)
+
+    local knob = create("Frame", {BackgroundColor3=App.Theme.Accent, BorderSizePixel=0, Size=UDim2.new(0,18,0,18), Position=UDim2.new(0,2,0.5,-9)})
+    knob.Parent = btn
+    addCorner(knob, 99)
+
+    local state = default and true or false
+    local function set(v)
+        state = v
+        tween(knob, 0.14, {Position = state and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9)})
+        btn.BackgroundColor3 = state and Color3.fromRGB(36,36,42) or App.Theme.Main
+        if cb then cb(state) end
+    end
+    btn.MouseButton1Click:Connect(function() set(not state) end)
+    set(state)
+    return {Set = set, Get = function() return state end}
+end
+
+local function createButton(parent, title, desc, text, cb)
+    local h = controlHolder(parent, 46)
+    local t = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,7), Size=UDim2.new(1,-120,0,16), Text=title, Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = h
+    registerTheme(t, "TextColor3", "Text")
+    local d = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,23), Size=UDim2.new(1,-120,0,14), Text=desc, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    d.Parent = h
+    registerTheme(d, "TextColor3", "Sub")
+    local b = create("TextButton", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,84,0,24), Text=text, Font=Enum.Font.GothamBold, TextSize=12, AutoButtonColor=false, BorderSizePixel=0})
+    b.Parent = h
+    registerTheme(b, "BackgroundColor3", "Main")
+    registerTheme(b, "TextColor3", "Text")
+    addCorner(b, 8)
+    addStroke(b)
+    b.MouseButton1Click:Connect(function() if cb then cb() end end)
+    return b
+end
+
+local function createSlider(parent, title, desc, min, max, default, step, cb)
+    local h = controlHolder(parent, 68)
+    local t = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,8), Size=UDim2.new(1,-72,0,16), Text=title, Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = h
+    registerTheme(t, "TextColor3", "Text")
+    local d = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,24), Size=UDim2.new(1,-72,0,14), Text=desc, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    d.Parent = h
+    registerTheme(d, "TextColor3", "Sub")
+    local value = create("TextLabel", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-12,0,8), Size=UDim2.new(0,56,0,16), Text=tostring(default), Font=Enum.Font.GothamBold, TextSize=12, TextXAlignment=Enum.TextXAlignment.Right})
+    value.Parent = h
+    registerTheme(value, "TextColor3", "Accent")
+
+    local bar = create("Frame", {BorderSizePixel=0, Position=UDim2.new(0,12,0,46), Size=UDim2.new(1,-24,0,10)})
+    bar.Parent = h
+    registerTheme(bar, "BackgroundColor3", "Main")
+    addCorner(bar, 99)
+    local fill = create("Frame", {BackgroundColor3=App.Theme.Accent, BorderSizePixel=0, Size=UDim2.new(0,0,1,0)})
+    fill.Parent = bar
+    addCorner(fill, 99)
+
+    local dragging = false
+    local state = default
+    local function fmt(v)
+        if math.floor(v) == v then return tostring(v) end
+        return string.format("%.1f", v)
+    end
+    local function set(v)
+        v = math.clamp(round(v, step or 1), min, max)
+        state = v
+        local pct = (v - min) / math.max(max - min, 1)
+        fill.Size = UDim2.new(pct,0,1,0)
+        value.Text = fmt(v)
+        if cb then cb(v) end
+    end
+    local function update(px)
+        local pct = math.clamp((px - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
+        set(min + (max - min) * pct)
+    end
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true update(input.Position.X) end
+    end)
+    table.insert(App.Connections, UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then update(input.Position.X) end
+    end))
+    table.insert(App.Connections, UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end))
+    set(default)
+    return {Set=set, Get=function() return state end}
+end
+
+local function createDropdown(parent, title, desc, values, default, cb)
+    local h = controlHolder(parent, 46)
+    local t = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,7), Size=UDim2.new(1,-120,0,16), Text=title, Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = h
+    registerTheme(t, "TextColor3", "Text")
+    local d = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,23), Size=UDim2.new(1,-120,0,14), Text=desc, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    d.Parent = h
+    registerTheme(d, "TextColor3", "Sub")
+
+    local b = create("TextButton", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,96,0,24), Text=tostring(default), Font=Enum.Font.GothamBold, TextSize=12, AutoButtonColor=false, BorderSizePixel=0})
+    b.Parent = h
+    registerTheme(b, "BackgroundColor3", "Main")
+    registerTheme(b, "TextColor3", "Text")
+    addCorner(b, 8)
+    addStroke(b)
+
+    local popupWidth = 120
+    local popup = makePopup(popupWidth, math.min(#values, 6) * 24 + 12)
+    local sf = create("ScrollingFrame", {BackgroundTransparency=1, BorderSizePixel=0, Size=UDim2.new(1,0,1,0), AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=UDim2.new(), ScrollBarThickness=2, ZIndex=101})
+    sf.Parent = popup
+    addPadding(sf, 6,6,6,6)
+    local lay = create("UIListLayout", {Padding=UDim.new(0,6)})
+    lay.Parent = sf
+
+    local state = default
+    local function set(v)
+        state = v
+        b.Text = tostring(v)
+        if cb then cb(v) end
+    end
+
+    for _, v in ipairs(values) do
+        local row = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Size=UDim2.new(1,0,0,20), Text=tostring(v), Font=Enum.Font.Gotham, TextSize=12, AutoButtonColor=false, ZIndex=101})
+        row.Parent = sf
+        registerTheme(row, "BackgroundColor3", "Panel2")
+        registerTheme(row, "TextColor3", "Text")
+        addCorner(row, 6)
+        row.MouseButton1Click:Connect(function()
+            set(v)
+            popup.Visible = false
+        end)
+    end
+
+    b.MouseButton1Click:Connect(function()
+        hideAllPopups()
+        local p, s = b.AbsolutePosition, b.AbsoluteSize
+        popup.Position = UDim2.new(0, p.X + s.X - popupWidth, 0, p.Y + s.Y + 4)
+        popup.Visible = not popup.Visible
+    end)
+
+    set(default)
+    return {Set=set, Get=function() return state end}
+end
+
+local function createColorPicker(parent, title, desc, defaultColor, cb)
+    local h = controlHolder(parent, 46)
+    local t = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,7), Size=UDim2.new(1,-120,0,16), Text=title, Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = h
+    registerTheme(t, "TextColor3", "Text")
+    local d = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,23), Size=UDim2.new(1,-120,0,14), Text=desc, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    d.Parent = h
+    registerTheme(d, "TextColor3", "Sub")
+
+    local b = create("TextButton", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,96,0,24), Text="Palette", Font=Enum.Font.GothamBold, TextSize=12, AutoButtonColor=false, BorderSizePixel=0, BackgroundColor3=defaultColor})
+    b.Parent = h
+    addCorner(b, 8)
+    addStroke(b)
+
+    local popup = makePopup(170, 138)
+    local titleBar = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,8), Size=UDim2.new(1,-20,0,18), Text="Pick a color", Font=Enum.Font.GothamBold, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=101})
+    titleBar.Parent = popup
+    registerTheme(titleBar, "TextColor3", "Text")
+
+    local grid = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,8,0,32), Size=UDim2.new(1,-16,1,-40), ZIndex=101})
+    grid.Parent = popup
+    local gl = create("UIGridLayout", {CellSize=UDim2.new(0,34,0,24), CellPadding=UDim2.new(0,6,0,6)})
+    gl.Parent = grid
+
+    local state = defaultColor
+    local function set(c)
+        state = c
+        b.BackgroundColor3 = c
+        if cb then cb(c) end
+    end
+
+    for _, entry in ipairs(Palette) do
+        local sw = create("TextButton", {BackgroundColor3=entry[2], BorderSizePixel=0, Text="", AutoButtonColor=false, ZIndex=101})
+        sw.Parent = grid
+        addCorner(sw, 8)
+        addStroke(sw, Color3.fromRGB(255,255,255), 1)
+        sw.MouseButton1Click:Connect(function()
+            set(entry[2])
+            popup.Visible = false
+        end)
+    end
+
+    b.MouseButton1Click:Connect(function()
+        hideAllPopups()
+        local p, s = b.AbsolutePosition, b.AbsoluteSize
+        popup.Position = UDim2.new(0, p.X + s.X - 170, 0, p.Y + s.Y + 4)
+        popup.Visible = not popup.Visible
+    end)
+
+    set(defaultColor)
+    return {Set=set, Get=function() return state end}
+end
+
+local function switchTab(name)
+    for n, frame in pairs(App.Pages) do
+        frame.Visible = (n == name)
+    end
+    for n, btn in pairs(App.TabButtons) do
+        btn.BackgroundColor3 = (n == name) and App.Theme.Panel2 or App.Theme.Panel
+    end
+    if App.PageTitle then App.PageTitle.Text = name end
+end
+
+local function makePage(name)
     local page = create("ScrollingFrame", {
-        Parent = App.PageHolder,
-        Name = name,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-        Size = UDim2.fromScale(1,1),
-        Visible = false,
-        ScrollBarThickness = 4,
+        Size = UDim2.new(1,0,1,0),
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         CanvasSize = UDim2.new(),
+        ScrollBarThickness = 3,
+        Visible = false
     })
-    addPadding(page, 0, 6, 0, 0)
-    local layout = create("UIListLayout", {
-        Parent = page,
-        Padding = UDim.new(0, 10),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    })
+    page.Parent = App.PageHolder
+    local lay = create("UIListLayout", {Padding = UDim.new(0,10)})
+    lay.Parent = page
+    addPadding(page, 2,2,2,2)
     App.Pages[name] = page
     return page
 end
 
-local function switchPage(name)
-    for pageName, page in pairs(App.Pages) do
-        page.Visible = pageName == name
+local function createESPRecord(target)
+    local folder = Instance.new("Folder")
+    folder.Name = "ESP"
+    folder.Parent = App.Gui
+
+    local line = Drawing.new("Line")
+    line.Visible = false
+    line.Thickness = 1.5
+
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Filled = false
+    box.Thickness = 1.4
+
+    local corners = {}
+    for i = 1, 8 do
+        local l = Drawing.new("Line")
+        l.Visible = false
+        l.Thickness = 1.4
+        corners[i] = l
     end
-    for tabName, button in pairs(App.TabButtons) do
-        button.BackgroundColor3 = (tabName == name) and Color3.fromRGB(32,32,40) or Themes.Panel
-    end
-    App.PageTitle.Text = name
+
+    local healthOutline = Drawing.new("Square")
+    healthOutline.Visible = false
+    healthOutline.Filled = false
+    healthOutline.Thickness = 1
+
+    local healthFill = Drawing.new("Square")
+    healthFill.Visible = false
+    healthFill.Filled = true
+    healthFill.Thickness = 1
+
+    App.ESP[target] = {
+        Target = target,
+        Line = line,
+        Box = box,
+        Corners = corners,
+        HealthOutline = healthOutline,
+        HealthFill = healthFill,
+    }
+    return App.ESP[target]
 end
 
-local function createSection(parent, title, description)
-    local section = create("Frame", {
-        Parent = parent,
-        BackgroundColor3 = Themes.Panel,
-        BorderSizePixel = 0,
-        Size = UDim2.new(1, -4, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-    })
-    addCorner(section, 12)
-    addStroke(section, Themes.Stroke, 1)
-
-    local titleLabel = create("TextLabel", {
-        Parent = section,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(14, 10),
-        Size = UDim2.new(1, -28, 0, 18),
-        Text = title,
-        Font = Enum.Font.GothamBold,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Text,
-    })
-
-    local descLabel = create("TextLabel", {
-        Parent = section,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(14, 28),
-        Size = UDim2.new(1, -28, 0, 14),
-        Text = description or "",
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Sub,
-    })
-
-    local line = create("Frame", {
-        Parent = section,
-        Position = UDim2.new(0, 12, 0, 48),
-        Size = UDim2.new(1, -24, 0, 1),
-        BorderSizePixel = 0,
-        BackgroundColor3 = Themes.Stroke,
-    })
-
-    local body = create("Frame", {
-        Parent = section,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(0, 54),
-        Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-    })
-    addPadding(body, 12, 12, 0, 12)
-    local layout = create("UIListLayout", {
-        Parent = body,
-        Padding = UDim.new(0, 8),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    })
-    return body
+local function removeESPRecord(target)
+    local rec = App.ESP[target]
+    if not rec then return end
+    pcall(function() rec.Line:Remove() end)
+    pcall(function() rec.Box:Remove() end)
+    pcall(function() rec.HealthOutline:Remove() end)
+    pcall(function() rec.HealthFill:Remove() end)
+    for _, l in ipairs(rec.Corners) do pcall(function() l:Remove() end) end
+    App.ESP[target] = nil
 end
 
-local function createControlHolder(parent, height)
-    local holder = create("Frame", {
-        Parent = parent,
-        BackgroundColor3 = Themes.Section,
-        BorderSizePixel = 0,
-        Size = UDim2.new(1, 0, 0, height or 44),
-    })
-    addCorner(holder, 10)
-    addStroke(holder, Themes.Stroke, 1)
-    return holder
+local function hideRecord(rec)
+    rec.Line.Visible = false
+    rec.Box.Visible = false
+    rec.HealthOutline.Visible = false
+    rec.HealthFill.Visible = false
+    for _, l in ipairs(rec.Corners) do l.Visible = false end
 end
 
-local function createParagraph(parent, title, body)
-    local holder = createControlHolder(parent, 60)
-    local titleLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 8),
-        Size = UDim2.new(1, -24, 0, 16),
-        Text = title,
-        Font = Enum.Font.GothamBold,
-        TextSize = 13,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Text,
-    })
-    local bodyLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 26),
-        Size = UDim2.new(1, -24, 0, 28),
-        TextWrapped = true,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        Text = body,
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Sub,
-    })
-    return holder
-end
-
-local function createCheckbox(parent, title, description, initial, callback)
-    local holder = createControlHolder(parent, 46)
-    local titleLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 7),
-        Size = UDim2.new(1, -74, 0, 16),
-        Text = title,
-        Font = Enum.Font.GothamBold,
-        TextSize = 13,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Text,
-    })
-    local descLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 23),
-        Size = UDim2.new(1, -74, 0, 14),
-        Text = description,
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Sub,
-    })
-
-    local button = create("TextButton", {
-        Parent = holder,
-        AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -12, 0.5, 0),
-        Size = UDim2.fromOffset(22, 22),
-        Text = "",
-        AutoButtonColor = false,
-        BackgroundColor3 = Themes.Panel,
-        BorderSizePixel = 0,
-    })
-    addCorner(button, 6)
-    addStroke(button, Themes.Stroke, 1)
-
-    local mark = create("TextLabel", {
-        Parent = button,
-        BackgroundTransparency = 1,
-        Size = UDim2.fromScale(1,1),
-        Text = "✓",
-        Font = Enum.Font.GothamBold,
-        TextSize = 15,
-        TextColor3 = Themes.Accent,
-        TextTransparency = initial and 0 or 1,
-    })
-
-    local value = initial and true or false
-    local function set(v)
-        value = v and true or false
-        mark.TextTransparency = value and 0 or 1
-        if callback then
-            callback(value)
+local function collectTargets()
+    local out = {}
+    if State.ESPPlayers then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character and isAliveModel(plr.Character) then
+                table.insert(out, plr.Character)
+            end
         end
     end
-    button.MouseButton1Click:Connect(function()
-        set(not value)
-    end)
-    set(value)
-    return {Set = set, Get = function() return value end}
-end
-
-local function createCycle(parent, title, description, values, defaultValue, callback)
-    local holder = createControlHolder(parent, 46)
-    local titleLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 7),
-        Size = UDim2.new(1, -134, 0, 16),
-        Text = title,
-        Font = Enum.Font.GothamBold,
-        TextSize = 13,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Text,
-    })
-    local descLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 23),
-        Size = UDim2.new(1, -134, 0, 14),
-        Text = description,
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Sub,
-    })
-
-    local button = create("TextButton", {
-        Parent = holder,
-        AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -12, 0.5, 0),
-        Size = UDim2.fromOffset(112, 24),
-        AutoButtonColor = false,
-        BackgroundColor3 = Themes.Panel,
-        BorderSizePixel = 0,
-        Font = Enum.Font.GothamBold,
-        TextSize = 12,
-        TextColor3 = Themes.Text,
-        Text = "",
-    })
-    addCorner(button, 8)
-    addStroke(button, Themes.Stroke, 1)
-
-    local index = 1
-    for i, v in ipairs(values) do
-        if v == defaultValue then
-            index = i
-            break
-        end
-    end
-
-    local function setByIndex(i)
-        if i < 1 then i = #values end
-        if i > #values then i = 1 end
-        index = i
-        button.Text = tostring(values[index])
-        if callback then
-            callback(values[index])
-        end
-    end
-
-    button.MouseButton1Click:Connect(function()
-        setByIndex(index + 1)
-    end)
-
-    setByIndex(index)
-    return {
-        Set = function(v)
-            for i, item in ipairs(values) do
-                if item == v then
-                    setByIndex(i)
-                    break
+    if State.ESPNPCs then
+        local seen = {}
+        for _, tag in ipairs({"NPC","Enemy","Mob","Bot","DebugNPC"}) do
+            for _, m in ipairs(CollectionService:GetTagged(tag)) do
+                if m:IsA("Model") and isAliveModel(m) then
+                    seen[m] = true
                 end
             end
-        end,
-        Get = function()
-            return values[index]
         end
-    }
-end
-
-local function createColorCycle(parent, title, description, defaultName, callback)
-    local names = {}
-    for _, item in ipairs(ColorChoices) do
-        table.insert(names, item[1])
-    end
-    return createCycle(parent, title, description, names, defaultName, function(name)
-        State.ESPColor = getColorByChoice(name)
-        if callback then
-            callback(name)
-        end
-    end)
-end
-
-local function createSlider(parent, title, description, min, max, defaultValue, callback)
-    local holder = createControlHolder(parent, 70)
-    local titleLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 8),
-        Size = UDim2.new(1, -80, 0, 16),
-        Text = title,
-        Font = Enum.Font.GothamBold,
-        TextSize = 13,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Text,
-    })
-    local descLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 24),
-        Size = UDim2.new(1, -80, 0, 14),
-        Text = description,
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Sub,
-    })
-    local valueLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -12, 0, 8),
-        Size = UDim2.fromOffset(56, 16),
-        Text = tostring(defaultValue),
-        Font = Enum.Font.GothamBold,
-        TextSize = 12,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        TextColor3 = Themes.Accent,
-    })
-
-    local bar = create("Frame", {
-        Parent = holder,
-        Position = UDim2.new(0, 12, 0, 47),
-        Size = UDim2.new(1, -24, 0, 10),
-        BorderSizePixel = 0,
-        BackgroundColor3 = Themes.Panel,
-    })
-    addCorner(bar, 999)
-    local fill = create("Frame", {
-        Parent = bar,
-        Size = UDim2.fromScale(0, 1),
-        BorderSizePixel = 0,
-        BackgroundColor3 = Themes.Accent,
-    })
-    addCorner(fill, 999)
-
-    local value = defaultValue
-    local dragging = false
-
-    local function set(v)
-        value = math.clamp(math.floor(v + 0.5), min, max)
-        local pct = (value - min) / math.max(1, (max - min))
-        fill.Size = UDim2.fromScale(pct, 1)
-        valueLabel.Text = tostring(value)
-        if callback then
-            callback(value)
-        end
-    end
-
-    local function update(inputX)
-        local pct = math.clamp((inputX - bar.AbsolutePosition.X) / math.max(1, bar.AbsoluteSize.X), 0, 1)
-        set(min + ((max - min) * pct))
-    end
-
-    bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            update(input.Position.X)
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            update(input.Position.X)
-        end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-
-    set(defaultValue)
-    return {Set = set, Get = function() return value end}
-end
-
-local function createKeybind(parent, title, description, defaultValue, callback)
-    local holder = createControlHolder(parent, 46)
-    local titleLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 7),
-        Size = UDim2.new(1, -134, 0, 16),
-        Text = title,
-        Font = Enum.Font.GothamBold,
-        TextSize = 13,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Text,
-    })
-    local descLabel = create("TextLabel", {
-        Parent = holder,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 23),
-        Size = UDim2.new(1, -134, 0, 14),
-        Text = description,
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Sub,
-    })
-
-    local button = create("TextButton", {
-        Parent = holder,
-        AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -12, 0.5, 0),
-        Size = UDim2.fromOffset(112, 24),
-        AutoButtonColor = false,
-        BackgroundColor3 = Themes.Panel,
-        BorderSizePixel = 0,
-        Font = Enum.Font.GothamBold,
-        TextSize = 12,
-        TextColor3 = Themes.Text,
-        Text = defaultValue.Name,
-    })
-    addCorner(button, 8)
-    addStroke(button, Themes.Stroke, 1)
-
-    local waiting = false
-    local value = defaultValue
-
-    local function set(v)
-        value = v
-        button.Text = v and v.Name or "None"
-        if callback then
-            callback(v)
-        end
-    end
-
-    button.MouseButton1Click:Connect(function()
-        waiting = true
-        button.Text = "..."
-    end)
-
-    UserInputService.InputBegan:Connect(function(input, gp)
-        if waiting then
-            waiting = false
-            if input.KeyCode and input.KeyCode ~= Enum.KeyCode.Unknown then
-                set(input.KeyCode)
-            else
-                button.Text = value and value.Name or "None"
+        for _, folderName in ipairs({"NPCs","Enemies","Mobs","Bots"}) do
+            local folder = Workspace:FindFirstChild(folderName)
+            if folder then
+                for _, child in ipairs(folder:GetChildren()) do
+                    if child:IsA("Model") and isAliveModel(child) then
+                        seen[child] = true
+                    end
+                end
             end
         end
-    end)
+        for model in pairs(seen) do table.insert(out, model) end
+    end
+    return out
+end
 
-    set(defaultValue)
-    return {Set = set, Get = function() return value end}
+local function drawCornerBox(lines, x, y, w, h, color)
+    local lenX, lenY = w * 0.25, h * 0.25
+    local pts = {
+        {Vector2.new(x, y), Vector2.new(x + lenX, y)}, {Vector2.new(x, y), Vector2.new(x, y + lenY)},
+        {Vector2.new(x+w, y), Vector2.new(x+w - lenX, y)}, {Vector2.new(x+w, y), Vector2.new(x+w, y + lenY)},
+        {Vector2.new(x, y+h), Vector2.new(x + lenX, y+h)}, {Vector2.new(x, y+h), Vector2.new(x, y+h - lenY)},
+        {Vector2.new(x+w, y+h), Vector2.new(x+w - lenX, y+h)}, {Vector2.new(x+w, y+h), Vector2.new(x+w, y+h - lenY)},
+    }
+    for i, l in ipairs(lines) do
+        l.From = pts[i][1]
+        l.To = pts[i][2]
+        l.Color = color
+        l.Visible = true
+    end
+end
+
+local function drawHealth(rec, x, y, w, h, healthPct)
+    rec.HealthOutline.Visible = false
+    rec.HealthFill.Visible = false
+    if not State.HealthBar then return end
+
+    local hpColor = Color3.fromRGB(255 - math.floor(255*healthPct), math.floor(255*healthPct), 80)
+    local thickness = 3
+
+    if State.HealthBarSide == "Left" or State.HealthBarSide == "Right" then
+        local bx = State.HealthBarSide == "Left" and (x - 6) or (x + w + 3)
+        rec.HealthOutline.Position = Vector2.new(bx, y)
+        rec.HealthOutline.Size = Vector2.new(thickness, h)
+        rec.HealthOutline.Color = Color3.fromRGB(15,15,15)
+        rec.HealthOutline.Visible = true
+
+        local fillH = math.max(1, h * healthPct)
+        rec.HealthFill.Position = Vector2.new(bx+1, y + h - fillH + 1)
+        rec.HealthFill.Size = Vector2.new(thickness-2, fillH-2)
+        rec.HealthFill.Color = hpColor
+        rec.HealthFill.Visible = true
+    else
+        local by = State.HealthBarSide == "Top" and (y - 6) or (y + h + 3)
+        rec.HealthOutline.Position = Vector2.new(x, by)
+        rec.HealthOutline.Size = Vector2.new(w, thickness)
+        rec.HealthOutline.Color = Color3.fromRGB(15,15,15)
+        rec.HealthOutline.Visible = true
+
+        local fillW = math.max(1, w * healthPct)
+        rec.HealthFill.Position = Vector2.new(x+1, by+1)
+        rec.HealthFill.Size = Vector2.new(fillW-2, thickness-2)
+        rec.HealthFill.Color = hpColor
+        rec.HealthFill.Visible = true
+    end
+end
+
+local function updateESP()
+    local live = {}
+    local targets = State.ESPEnabled and collectTargets() or {}
+    for _, target in ipairs(targets) do
+        local root = getRoot(target)
+        local hum = getHumanoid(target)
+        if root and hum and hum.Health > 0 then
+            local dist = distanceTo(root.Position)
+            if dist <= State.ESPDistance then
+                local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                if onScreen and pos.Z > 0 then
+                    local _, size = target:GetBoundingBox()
+                    local scale = 1 / math.max(pos.Z, 1) * 1000
+                    local h = math.clamp(size.Y * scale, 26, 300)
+                    local w = math.clamp(h * 0.62, 18, 200)
+                    local x = pos.X - w/2
+                    local y = pos.Y - h/2
+
+                    local rec = App.ESP[target] or createESPRecord(target)
+                    live[target] = true
+                    local c = State.ESPColor
+
+                    rec.Box.Visible = false
+                    for _, l in ipairs(rec.Corners) do l.Visible = false end
+                    rec.Line.Visible = false
+
+                    if State.ESPStyle == "Box" then
+                        rec.Box.Position = Vector2.new(x, y)
+                        rec.Box.Size = Vector2.new(w, h)
+                        rec.Box.Color = c
+                        rec.Box.Visible = true
+                    else
+                        drawCornerBox(rec.Corners, x, y, w, h, c)
+                    end
+
+                    if State.Tracers then
+                        local origin = getTracerOrigin()
+                        rec.Line.From = origin
+                        rec.Line.To = Vector2.new(pos.X, y + h)
+                        rec.Line.Color = c
+                        rec.Line.Visible = true
+                    end
+
+                    drawHealth(rec, x, y, w, h, hum.Health / math.max(hum.MaxHealth, 1))
+                end
+            end
+        end
+    end
+    for target, rec in pairs(App.ESP) do
+        if not live[target] then
+            hideRecord(rec)
+            if not target or not target.Parent then
+                removeESPRecord(target)
+            end
+        end
+    end
+end
+
+local function updateFOV()
+    if not App.FOVCircle then return end
+    local size = math.max(0, State.FOV) * 2
+    App.FOVCircle.Size = UDim2.new(0, size, 0, size)
+    App.FOVCircle.Position = UDim2.new(0.5,0,0.5,0)
+    App.FOVCircle.Visible = State.MenuVisible and State.ShowFOV
+end
+
+local function clearPreview()
+    if App.PreviewWorld then App.PreviewWorld:Destroy() App.PreviewWorld = nil end
+    if App.PreviewClone then App.PreviewClone:Destroy() App.PreviewClone = nil end
+end
+
+local function rebuildPreview()
+    clearPreview()
+    if not App.Viewport or not State.CharacterPreview then
+        if App.PreviewWindow then App.PreviewWindow.Visible = false end
+        return
+    end
+
+    App.PreviewWindow.Visible = State.MenuVisible
+    local world = Instance.new("WorldModel")
+    world.Parent = App.Viewport
+    App.PreviewWorld = world
+
+    local char = getCharacter()
+    if not char then return end
+    local clone = char:Clone()
+    for _, v in ipairs(clone:GetDescendants()) do
+        if v:IsA("LocalScript") or v:IsA("Script") then
+            v:Destroy()
+        elseif v:IsA("BasePart") then
+            v.Anchored = true
+            v.CanCollide = false
+        end
+    end
+    clone.Parent = world
+    App.PreviewClone = clone
+
+    local cam = Instance.new("Camera")
+    cam.Parent = App.Viewport
+    App.Viewport.CurrentCamera = cam
+
+    local root = getRoot(clone)
+    if root then
+        cam.CFrame = CFrame.new(root.Position + Vector3.new(2, 1.2, 6), root.Position + Vector3.new(0, 1, 0))
+    else
+        cam.CFrame = CFrame.new(Vector3.new(0, 2, 6), Vector3.new(0, 1, 0))
+    end
+
+    local light = Instance.new("PointLight")
+    light.Brightness = 1.5
+    light.Range = 20
+    light.Parent = cam
+end
+
+local function refreshMenuState()
+    if not App.Root then return end
+    App.Root.Visible = State.MenuVisible
+    if App.PreviewWindow then
+        App.PreviewWindow.Visible = State.MenuVisible and State.CharacterPreview
+    end
+    if App.PopupBlocker then
+        App.PopupBlocker.Visible = State.MenuVisible
+    end
+    if State.Minimized then
+        App.Root.Size = UDim2.new(0, 930, 0, 72)
+        App.Sidebar.Visible = false
+        App.Content.Visible = false
+    else
+        App.Root.Size = UDim2.new(0, 930, 0, 620)
+        App.Sidebar.Visible = true
+        App.Content.Visible = true
+    end
+    updateFOV()
 end
 
 local function buildUI()
     App.Gui = create("ScreenGui", {
-        Name = "NexhideraVisualPanel",
-        Parent = PlayerGui,
+        Name = "NexhideraUI",
+        Parent = CoreGui,
         ResetOnSpawn = false,
-        IgnoreGuiInset = true,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        IgnoreGuiInset = true
     })
 
-    App.Overlay = create("Frame", {
-        Parent = App.Gui,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Size = UDim2.fromScale(1,1),
-        ZIndex = 1,
-    })
+    App.PopupBlocker = create("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0)})
+    App.PopupBlocker.Parent = App.Gui
 
-    local viewport = Camera.ViewportSize
-    local rootWidth, rootHeight = 940, 590
-    local startX = math.floor((viewport.X - rootWidth) * 0.5)
-    local startY = math.floor((viewport.Y - rootHeight) * 0.5)
+    App.Intro = create("Frame", {BackgroundColor3 = Color3.fromRGB(0,0,0), BorderSizePixel=0, Size=UDim2.new(1,0,1,0), ZIndex=200})
+    App.Intro.Parent = App.Gui
+    local introGlow = createGlowText(App.Intro, "Nexhidera", UDim2.new(0.5,-220,0.5,-50), UDim2.new(0,440,0,80), 62, Enum.Font.GothamBlack, 201)
+    introGlow.AnchorPoint = Vector2.new(0,0)
+    for _, child in ipairs(introGlow:GetChildren()) do
+        if child:IsA("TextLabel") then child.TextXAlignment = Enum.TextXAlignment.Center end
+    end
 
     App.Root = create("Frame", {
-        Parent = App.Gui,
-        BackgroundColor3 = Themes.Main,
+        BackgroundTransparency = 0,
         BorderSizePixel = 0,
-        Position = UDim2.fromOffset(startX, startY),
-        Size = UDim2.fromOffset(rootWidth, rootHeight),
-        Visible = true,
-        ZIndex = 20,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.44,0,0.52,0),
+        Size = UDim2.new(0,930,0,620),
+        Visible = false
     })
-    addCorner(App.Root, 16)
-    addStroke(App.Root, Themes.Stroke, 1)
+    App.Root.Parent = App.Gui
+    registerTheme(App.Root, "BackgroundColor3", "Main")
+    addCorner(App.Root, 18)
+    addStroke(App.Root)
 
-    App.Header = create("Frame", {
-        Parent = App.Root,
-        BackgroundColor3 = Themes.Panel,
-        BorderSizePixel = 0,
-        Size = UDim2.new(1, 0, 0, 56),
-        Active = true,
-        ZIndex = 21,
-    })
-    addCorner(App.Header, 16)
+    App.Header = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, Size=UDim2.new(1,0,0,64)})
+    App.Header.Parent = App.Root
+    registerTheme(App.Header, "BackgroundColor3", "Panel")
+    addCorner(App.Header, 18)
+    local fix = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,0,1,-18), Size=UDim2.new(1,0,0,18)})
+    fix.Parent = App.Header
+    registerTheme(fix, "BackgroundColor3", "Panel")
 
-    local fix = create("Frame", {
-        Parent = App.Header,
-        BackgroundColor3 = Themes.Panel,
-        BorderSizePixel = 0,
-        Position = UDim2.new(0, 0, 1, -14),
-        Size = UDim2.new(1, 0, 0, 14),
-        ZIndex = 21,
-    })
+    App.DragBar = create("TextButton", {BackgroundTransparency=1, BorderSizePixel=0, Size=UDim2.new(1,-170,1,0), Text="", AutoButtonColor=false, Active=true})
+    App.DragBar.Parent = App.Header
 
-    local title = create("TextLabel", {
-        Parent = App.Header,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(16, 10),
-        Size = UDim2.new(1, -220, 0, 20),
-        Text = "Nexhidera x 1.7",
-        Font = Enum.Font.GothamBold,
-        TextSize = 18,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Text,
-        ZIndex = 22,
-    })
-    local subtitle = create("TextLabel", {
-        Parent = App.Header,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(16, 29),
-        Size = UDim2.new(1, -220, 0, 14),
-        Text = "ESP real • mover • minimizar • cerrar • ocultar con tecla",
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Sub,
-        ZIndex = 22,
-    })
+    local titleGlow = createGlowText(App.Header, "NEXHIDERA", UDim2.new(0,16,0,8), UDim2.new(0,400,0,24), 24, Enum.Font.GothamBlack, 5)
+    local subtitleGlow = createGlowText(App.Header, "South Bronx: The Trenches ❗", UDim2.new(0,16,0,33), UDim2.new(0,330,0,18), 12, Enum.Font.GothamBold, 5)
+    for _, ch in ipairs(subtitleGlow:GetChildren()) do
+        if ch:IsA("TextLabel") then ch.TextTransparency = ch.TextTransparency == 0 and 0.08 or 0.8 end
+    end
 
-    local dragHandle = create("TextButton", {
-        Parent = App.Header,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(1, -180, 1, 0),
-        Text = "",
-        AutoButtonColor = false,
-        Active = true,
-        ZIndex = 25,
-    })
-    App.DragHandle = dragHandle
+    local buttons = create("Frame", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-14,0,14), Size=UDim2.new(0,156,0,28)})
+    buttons.Parent = App.Header
+    local bl = create("UIListLayout", {FillDirection=Enum.FillDirection.Horizontal, HorizontalAlignment=Enum.HorizontalAlignment.Right, Padding=UDim.new(0,8)})
+    bl.Parent = buttons
 
-    local buttonHolder = create("Frame", {
-        Parent = App.Header,
-        BackgroundTransparency = 1,
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -12, 0, 10),
-        Size = UDim2.fromOffset(150, 26),
-        ZIndex = 26,
-    })
-    local buttonLayout = create("UIListLayout", {
-        Parent = buttonHolder,
-        FillDirection = Enum.FillDirection.Horizontal,
-        HorizontalAlignment = Enum.HorizontalAlignment.Right,
-        Padding = UDim.new(0, 8),
-    })
-
-    local function makeHeaderButton(text)
-        local b = create("TextButton", {
-            Parent = buttonHolder,
-            BackgroundColor3 = Themes.Section,
-            BorderSizePixel = 0,
-            Size = UDim2.fromOffset(44, 26),
-            AutoButtonColor = false,
-            Text = text,
-            Font = Enum.Font.GothamBold,
-            TextSize = 13,
-            TextColor3 = Themes.Text,
-            ZIndex = 27,
-        })
-        addCorner(b, 8)
-        addStroke(b, Themes.Stroke, 1)
+    local function topButton(text)
+        local b = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Size=UDim2.new(0,44,1,0), Text=text, Font=Enum.Font.GothamBold, TextSize=13, AutoButtonColor=false})
+        b.Parent = buttons
+        registerTheme(b, "BackgroundColor3", "Main")
+        registerTheme(b, "TextColor3", "Text")
+        addCorner(b, 10)
+        addStroke(b)
         return b
     end
+    App.MinBtn = topButton("—")
+    App.HideBtn = topButton("H")
+    App.CloseBtn = topButton("X")
 
-    App.MinButton = makeHeaderButton("—")
-    App.HideButton = makeHeaderButton("H")
-    App.CloseButton = makeHeaderButton("X")
-
-    App.Sidebar = create("Frame", {
-        Parent = App.Root,
-        BackgroundColor3 = Themes.Panel,
-        BorderSizePixel = 0,
-        Position = UDim2.fromOffset(12, 68),
-        Size = UDim2.new(0, 210, 1, -80),
-        ZIndex = 21,
-    })
+    App.Sidebar = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,12,0,78), Size=UDim2.new(0,220,1,-90)})
+    App.Sidebar.Parent = App.Root
+    registerTheme(App.Sidebar, "BackgroundColor3", "Panel")
     addCorner(App.Sidebar, 14)
-    addStroke(App.Sidebar, Themes.Stroke, 1)
+    addStroke(App.Sidebar)
 
-    local tabList = create("Frame", {
-        Parent = App.Sidebar,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(10, 10),
-        Size = UDim2.new(1, -20, 1, -20),
-        ZIndex = 22,
-    })
-    local tabLayout = create("UIListLayout", {
-        Parent = tabList,
-        Padding = UDim.new(0, 8),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    })
+    local tabs = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,10), Size=UDim2.new(1,-20,1,-20)})
+    tabs.Parent = App.Sidebar
+    local tl = create("UIListLayout", {Padding=UDim.new(0,8)})
+    tl.Parent = tabs
 
-    App.Content = create("Frame", {
-        Parent = App.Root,
-        BackgroundColor3 = Themes.Panel,
-        BorderSizePixel = 0,
-        Position = UDim2.fromOffset(234, 68),
-        Size = UDim2.new(1, -246, 1, -80),
-        ZIndex = 21,
-    })
-    addCorner(App.Content, 14)
-    addStroke(App.Content, Themes.Stroke, 1)
-
-    App.PageTitle = create("TextLabel", {
-        Parent = App.Content,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(14, 12),
-        Size = UDim2.new(1, -200, 0, 20),
-        Text = "Home",
-        Font = Enum.Font.GothamBold,
-        TextSize = 18,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Themes.Text,
-        ZIndex = 22,
-    })
-
-    App.HotkeyLabel = create("TextLabel", {
-        Parent = App.Content,
-        BackgroundTransparency = 1,
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -14, 0, 14),
-        Size = UDim2.fromOffset(180, 16),
-        Text = "Ocultar: " .. State.MenuKey.Name,
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        TextColor3 = Themes.Sub,
-        ZIndex = 22,
-    })
-
-    App.PageHolder = create("Frame", {
-        Parent = App.Content,
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(12, 46),
-        Size = UDim2.new(1, -24, 1, -58),
-        ZIndex = 22,
-    })
-
-    local tabs = {"Home", "Visual", "Settings"}
-    for _, tabName in ipairs(tabs) do
-        local tab = create("TextButton", {
-            Parent = tabList,
-            BackgroundColor3 = Themes.Panel,
-            BorderSizePixel = 0,
-            Size = UDim2.new(1, 0, 0, 38),
-            AutoButtonColor = false,
-            Text = tabName,
-            Font = Enum.Font.GothamBold,
-            TextSize = 13,
-            TextColor3 = Themes.Text,
-            ZIndex = 22,
-        })
-        addCorner(tab, 10)
-        addStroke(tab, Themes.Stroke, 1)
-        App.TabButtons[tabName] = tab
-        tab.MouseButton1Click:Connect(function()
-            switchPage(tabName)
-        end)
+    for _, name in ipairs({"Main","Visual","Combat","Settings"}) do
+        local b = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Size=UDim2.new(1,0,0,38), Text=name, Font=Enum.Font.GothamBold, TextSize=13, AutoButtonColor=false})
+        b.Parent = tabs
+        registerTheme(b, "BackgroundColor3", "Panel")
+        registerTheme(b, "TextColor3", "Text")
+        addCorner(b, 10)
+        addStroke(b)
+        App.TabButtons[name] = b
+        b.MouseButton1Click:Connect(function() switchTab(name) end)
     end
+
+    App.Content = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,244,0,78), Size=UDim2.new(1,-256,1,-90)})
+    App.Content.Parent = App.Root
+    registerTheme(App.Content, "BackgroundColor3", "Panel")
+    addCorner(App.Content, 14)
+    addStroke(App.Content)
+
+    App.PageTitle = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,14,0,12), Size=UDim2.new(1,-28,0,18), Text="Main", Font=Enum.Font.GothamBold, TextSize=18, TextXAlignment=Enum.TextXAlignment.Left})
+    App.PageTitle.Parent = App.Content
+    registerTheme(App.PageTitle, "TextColor3", "Text")
+
+    App.Hotkey = create("TextLabel", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-16,0,14), Size=UDim2.new(0,180,0,16), Text="Toggle: " .. State.MenuKey.Name, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Right})
+    App.Hotkey.Parent = App.Content
+    registerTheme(App.Hotkey, "TextColor3", "Sub")
+
+    App.PageHolder = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,46), Size=UDim2.new(1,-24,1,-58)})
+    App.PageHolder.Parent = App.Content
+
+    App.NotificationHolder = create("Frame", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,1), Position=UDim2.new(1,-18,1,-18), Size=UDim2.new(0,300,1,-36)})
+    App.NotificationHolder.Parent = App.Gui
+    local nl = create("UIListLayout", {Padding=UDim.new(0,8), VerticalAlignment=Enum.VerticalAlignment.Bottom, HorizontalAlignment=Enum.HorizontalAlignment.Right})
+    nl.Parent = App.NotificationHolder
+
+    App.PreviewWindow = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, AnchorPoint=Vector2.new(0,0.5), Position=UDim2.new(0.44,475,0.52,0), Size=UDim2.new(0,240,0,350), Visible=false})
+    App.PreviewWindow.Parent = App.Gui
+    registerTheme(App.PreviewWindow, "BackgroundColor3", "Panel")
+    addCorner(App.PreviewWindow, 16)
+    addStroke(App.PreviewWindow)
+
+    local prevTitle = createGlowText(App.PreviewWindow, "Character Preview", UDim2.new(0,14,0,12), UDim2.new(0,180,0,18), 15, Enum.Font.GothamBold, 5)
+    local prevSub = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,14,0,34), Size=UDim2.new(1,-28,0,14), Text="Your live character at the right side", Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    prevSub.Parent = App.PreviewWindow
+    registerTheme(prevSub, "TextColor3", "Sub")
+    App.Viewport = create("ViewportFrame", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,12,0,60), Size=UDim2.new(1,-24,1,-72)})
+    App.Viewport.Parent = App.PreviewWindow
+    registerTheme(App.Viewport, "BackgroundColor3", "Main")
+    addCorner(App.Viewport, 12)
+    addStroke(App.Viewport)
+
+    App.FOVCircle = create("Frame", {BackgroundTransparency=1, AnchorPoint=Vector2.new(0.5,0.5), Position=UDim2.new(0.5,0,0.5,0), Size=UDim2.new(0,300,0,300), Visible=false})
+    App.FOVCircle.Parent = App.Gui
+    local fovCorner = Instance.new("UICorner")
+    fovCorner.CornerRadius = UDim.new(1,0)
+    fovCorner.Parent = App.FOVCircle
+    local fovStroke = Instance.new("UIStroke")
+    fovStroke.Color = App.Theme.Accent
+    fovStroke.Thickness = 1.4
+    fovStroke.Parent = App.FOVCircle
+
+    applyTheme()
 end
 
 local function buildPages()
-    local home = createPage("Home")
-    local visual = createPage("Visual")
-    local settings = createPage("Settings")
+    local main = makePage("Main")
+    local visual = makePage("Visual")
+    local combat = makePage("Combat")
+    local settings = makePage("Settings")
 
-    local homeSection = createSection(home, "Estado", "Qué se arregló en esta versión")
-    createParagraph(homeSection, "Arreglado", "Ahora sí se puede mover el menú, minimizar, cerrar y ocultar con tecla. También la parte Visual fue cambiada a ESP real con lineas, box/corner y barra de vida.")
-    createParagraph(homeSection, "Controles", "Botón — = minimizar, H = ocultar, X = cerrar. La tecla por defecto para ocultar es RightShift, pero la puedes cambiar abajo en Settings.")
-    createParagraph(homeSection, "Nota", "Quité la contraseña para que entre directo. El ESP busca otros jugadores y NPCs de carpetas comunes como NPCs, Enemies, Mobs, Bots o tags típicos.")
-
-    local visualMain = createSection(visual, "Visual / ESP", "Opciones reales para el ESP")
-    createCheckbox(visualMain, "ESP", "Activa o desactiva todo el ESP", State.ESPEnabled, function(v)
-        State.ESPEnabled = v
-        if not v then
-            for _, record in pairs(App.Records) do
-                hideRecord(record)
-            end
-        end
-    end)
-    createCheckbox(visualMain, "Players", "Muestra ESP a otros jugadores", State.ShowPlayers, function(v)
-        State.ShowPlayers = v
-    end)
-    createCheckbox(visualMain, "NPCs", "Muestra ESP a NPCs detectados", State.ShowNPCs, function(v)
-        State.ShowNPCs = v
-    end)
-    createCheckbox(visualMain, "Names", "Muestra el nombre encima", State.ShowNames, function(v)
-        State.ShowNames = v
-    end)
-    createCheckbox(visualMain, "Distance", "Muestra la distancia abajo", State.ShowDistance, function(v)
-        State.ShowDistance = v
-    end)
-    createCheckbox(visualMain, "ESP Lineas", "Dibuja lineas desde la pantalla al objetivo", State.ShowLines, function(v)
-        State.ShowLines = v
-    end)
-    createCycle(visualMain, "Origen de lineas", "Top / Center / Bottom", {"Top", "Center", "Bottom"}, State.LineOrigin, function(v)
-        State.LineOrigin = v
-    end)
-    createCycle(visualMain, "Modo de caja", "Elegir entre Box o Corner", {"Box", "Corner"}, State.BoxMode, function(v)
-        State.BoxMode = v
-    end)
-    createCheckbox(visualMain, "Barra de vida", "Muestra health bar real", State.ShowHealthBar, function(v)
-        State.ShowHealthBar = v
-    end)
-    createCycle(visualMain, "Posicion barra HP", "Left / Right / Top / Bottom", {"Left", "Right", "Top", "Bottom"}, State.HealthBarSide, function(v)
-        State.HealthBarSide = v
-    end)
-    createColorCycle(visualMain, "Color ESP", "Cambia el color principal del ESP", "White")
-    createSlider(visualMain, "Max Distance", "Distancia máxima del ESP", 40, 1500, State.MaxDistance, function(v)
-        State.MaxDistance = v
+    local profile = createSection(main, "Profile", "Your Roblox info inside the main tab")
+    createParagraph(profile, "Player", "DisplayName: " .. LocalPlayer.DisplayName .. "   |   Username: @" .. LocalPlayer.Name)
+    createParagraph(profile, "Account", "AccountAge: " .. tostring(LocalPlayer.AccountAge) .. " days   |   UserId: " .. tostring(LocalPlayer.UserId))
+    createParagraph(profile, "Menu", "Movible, minimizable, closable, hotkey hide, preview window and glow title enabled.")
+    createButton(profile, "Refresh preview", "Rebuild the character window at the right side", "Refresh", function()
+        rebuildPreview()
+        notify("Preview", "Character preview refreshed.")
     end)
 
-    local settingsSection = createSection(settings, "Menu", "Opciones del menú")
-    createKeybind(settingsSection, "Tecla para ocultar", "Pulsa el botón y luego la tecla nueva", State.MenuKey, function(v)
-        State.MenuKey = v
-        App.HotkeyLabel.Text = "Ocultar: " .. State.MenuKey.Name
+    local vis = createSection(visual, "ESP", "Visual options start disabled and you activate what you want")
+    createToggle(vis, "Enable ESP", "Master toggle for the ESP system", false, function(v) State.ESPEnabled = v end)
+    createToggle(vis, "Players", "Show ESP for players", true, function(v) State.ESPPlayers = v end)
+    createToggle(vis, "NPCs", "Show ESP for NPCs with humanoid", true, function(v) State.ESPNPCs = v end)
+    createSlider(vis, "Max Distance", "How far the ESP can render", 50, 2000, 500, 10, function(v) State.ESPDistance = v end)
+    createColorPicker(vis, "ESP Color", "Open a palette menu and pick a color", State.ESPColor, function(c) State.ESPColor = c end)
+    createDropdown(vis, "ESP Style", "Choose between normal box or corner", {"Box", "Corner"}, State.ESPStyle, function(v) State.ESPStyle = v end)
+    createToggle(vis, "ESP Lines", "Draw tracers to the target", false, function(v) State.Tracers = v end)
+    createDropdown(vis, "Lines Origin", "Target-style menu for top, center or bottom", {"Top", "Center", "Bottom"}, State.TracerOrigin, function(v) State.TracerOrigin = v end)
+    createToggle(vis, "Health Bar", "Show health bar on the box", false, function(v) State.HealthBar = v end)
+    createDropdown(vis, "Health Position", "Choose left, right, top or bottom", {"Left", "Right", "Top", "Bottom"}, State.HealthBarSide, function(v) State.HealthBarSide = v end)
+    createToggle(vis, "Character Window", "Show a right-side window with your character", false, function(v)
+        State.CharacterPreview = v
+        rebuildPreview()
+        refreshMenuState()
     end)
-    createParagraph(settingsSection, "Movimiento", "Para mover el menú, arrástralo desde la parte de arriba. El botón H lo oculta y la tecla también lo muestra otra vez.")
+
+    local cbt = createSection(combat, "Combat / Aim", "All options start disabled")
+    createToggle(cbt, "Enable Combat Page", "Master toggle for this tab", false, function(v) State.CombatEnabled = v end)
+    createToggle(cbt, "Show FOV", "Only shows the FOV circle", false, function(v) State.ShowFOV = v updateFOV() end)
+    createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, 150, 1, function(v) State.FOV = v updateFOV() end)
+    createSlider(cbt, "Smooth", "Range from 0 to 10", 0, 10, 0, 0.1, function(v) State.Smooth = v end)
+    createDropdown(cbt, "Aim Part", "Choose head or chest", {"Head", "UpperTorso", "HumanoidRootPart"}, State.AimPart, function(v) State.AimPart = v end)
+    createParagraph(cbt, "Note", "This tab currently handles the visual FOV and configuration values inside the menu.")
+
+    local set = createSection(settings, "Settings", "Menu controls")
+    createButton(set, "Hide menu", "Same as pressing the hotkey", "Hide", function() State.MenuVisible = not State.MenuVisible refreshMenuState() end)
+    createButton(set, "Minimize", "Collapse and expand the panel", "Min", function() State.Minimized = not State.Minimized refreshMenuState() end)
+    createButton(set, "Close", "Destroy the whole UI", "Close", function()
+        for _, c in ipairs(App.Connections) do safeDisconnect(c) end
+        for target in pairs(App.ESP) do removeESPRecord(target) end
+        clearPreview()
+        if App.Gui then App.Gui:Destroy() end
+    end)
 end
 
-local function refreshMenuState()
-    if not App.Root then
-        return
-    end
-
-    App.Root.Visible = State.MenuVisible
-
-    if State.MenuMinimized then
-        App.Root.Size = UDim2.fromOffset(App.Root.Size.X.Offset, 66)
-        App.Sidebar.Visible = false
-        App.Content.Visible = false
-    else
-        App.Root.Size = UDim2.fromOffset(App.Root.Size.X.Offset, 590)
-        App.Sidebar.Visible = true
-        App.Content.Visible = true
-    end
-
-    if App.HotkeyLabel then
-        App.HotkeyLabel.Text = "Ocultar: " .. State.MenuKey.Name
-    end
-end
-
-local function hookMenu()
+local function hookDrag()
     local dragging = false
-    local dragInput = nil
-    local dragStart = nil
-    local startPos = nil
+    local startMouse, startPos
 
-    local function beginDrag(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+    local function begin(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            dragStart = input.Position
+            startMouse = UserInputService:GetMouseLocation()
             startPos = App.Root.Position
-
-            local changedConn
-            changedConn = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    dragInput = nil
-                    safeDisconnect(changedConn)
-                end
-            end)
-            table.insert(App.Connections, changedConn)
         end
     end
 
-    local function onInputChanged(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
+    local function update()
+        if dragging and startMouse and startPos then
+            local mouse = UserInputService:GetMouseLocation()
+            local delta = mouse - startMouse
+            App.Root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            App.PreviewWindow.Position = UDim2.new(App.Root.Position.X.Scale, App.Root.Position.X.Offset + App.Root.AbsoluteSize.X/2 + 12, App.Root.Position.Y.Scale, App.Root.Position.Y.Offset)
         end
     end
 
-    table.insert(App.Connections, App.DragHandle.InputBegan:Connect(beginDrag))
-    table.insert(App.Connections, App.DragHandle.InputChanged:Connect(onInputChanged))
-    table.insert(App.Connections, App.Header.InputBegan:Connect(beginDrag))
-    table.insert(App.Connections, App.Header.InputChanged:Connect(onInputChanged))
-
+    table.insert(App.Connections, App.DragBar.InputBegan:Connect(begin))
     table.insert(App.Connections, UserInputService.InputChanged:Connect(function(input)
-        if dragging and input == dragInput and dragStart and startPos then
-            local delta = input.Position - dragStart
-            App.Root.Position = UDim2.fromOffset(startPos.X.Offset + delta.X, startPos.Y.Offset + delta.Y)
-        end
+        if input.UserInputType == Enum.UserInputType.MouseMovement then update() end
     end))
-
     table.insert(App.Connections, UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-            dragInput = nil
-        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
     end))
+end
+
+local function hookButtons()
+    App.MinBtn.MouseButton1Click:Connect(function() State.Minimized = not State.Minimized refreshMenuState() end)
+    App.HideBtn.MouseButton1Click:Connect(function() State.MenuVisible = not State.MenuVisible refreshMenuState() end)
+    App.CloseBtn.MouseButton1Click:Connect(function()
+        for _, c in ipairs(App.Connections) do safeDisconnect(c) end
+        for target in pairs(App.ESP) do removeESPRecord(target) end
+        clearPreview()
+        App.Gui:Destroy()
+    end)
 
     table.insert(App.Connections, UserInputService.InputBegan:Connect(function(input, gp)
+        if gp then return end
         if input.KeyCode == State.MenuKey then
             State.MenuVisible = not State.MenuVisible
             refreshMenuState()
-            return
-        end
-    end))
-
-    table.insert(App.Connections, App.MinButton.MouseButton1Click:Connect(function()
-        State.MenuMinimized = not State.MenuMinimized
-        refreshMenuState()
-    end))
-
-    table.insert(App.Connections, App.HideButton.MouseButton1Click:Connect(function()
-        State.MenuVisible = false
-        refreshMenuState()
-    end))
-
-    table.insert(App.Connections, App.CloseButton.MouseButton1Click:Connect(function()
-        for _, conn in ipairs(App.Connections) do
-            safeDisconnect(conn)
-        end
-        for id in pairs(App.Records) do
-            removeRecord(id)
-        end
-        if App.Gui then
-            App.Gui:Destroy()
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if App.Popups then
+                local mouse = UserInputService:GetMouseLocation()
+                for _, p in ipairs(App.Popups) do
+                    if p.Visible then
+                        local pos, size = p.AbsolutePosition, p.AbsoluteSize
+                        local inside = mouse.X >= pos.X and mouse.X <= pos.X + size.X and mouse.Y >= pos.Y and mouse.Y <= pos.Y + size.Y
+                        if not inside then p.Visible = false end
+                    end
+                end
+            end
         end
     end))
 end
 
-local function onCharacterAdded(char)
-    task.wait(0.2)
-    refreshCandidates(true)
-end
-
-local function startLoops()
-    refreshCandidates(true)
-    table.insert(App.Connections, Players.PlayerAdded:Connect(function()
-        refreshCandidates(true)
-    end))
-    table.insert(App.Connections, Players.PlayerRemoving:Connect(function()
-        refreshCandidates(true)
-    end))
-    table.insert(App.Connections, LocalPlayer.CharacterAdded:Connect(onCharacterAdded))
-
-    table.insert(App.Connections, RunService.RenderStepped:Connect(function()
+local function startLoop()
+    local previewTick = 0
+    table.insert(App.Connections, RunService.RenderStepped:Connect(function(dt)
         updateESP()
+        updateFOV()
+        previewTick += dt
+        if previewTick >= 1.1 and State.CharacterPreview then
+            previewTick = 0
+            rebuildPreview()
+        end
+    end))
+    table.insert(App.Connections, LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(0.8)
+        rebuildPreview()
     end))
 end
 
 buildUI()
 buildPages()
-hookMenu()
-refreshMenuState()
-switchPage("Home")
-startLoops()
+switchTab("Main")
+hookDrag()
+hookButtons()
+startLoop()
+
+App.Root.Visible = false
+App.PreviewWindow.Visible = false
+updateFOV()
+
+notify("Loaded", "Intro will finish in 5 seconds.")
+
+task.delay(5, function()
+    if App.Intro and App.Intro.Parent then
+        tween(App.Intro, 0.35, {BackgroundTransparency = 1})
+        for _, desc in ipairs(App.Intro:GetDescendants()) do
+            if desc:IsA("TextLabel") then
+                tween(desc, 0.35, {TextTransparency = 1})
+            end
+        end
+        task.wait(0.4)
+        if App.Intro and App.Intro.Parent then App.Intro:Destroy() end
+    end
+    State.MenuVisible = true
+    refreshMenuState()
+    App.Root.Visible = true
+    notify("Nexhidera", "Menu loaded correctly.")
+end)
