@@ -39,6 +39,7 @@ local App = {
     TargetCache = {},
     ThumbCache = {},
     PlayerCards = {},
+    HomeStats = {},
 }
 
 local State = {
@@ -66,6 +67,15 @@ local State = {
     ESPNameSize = 13,
     ESPGlow = false,
     CharacterPreview = false,
+    ESPFluid = true,
+    ESPFluidness = 0.34,
+    DynamicQuality = true,
+    OnlyScreenTargets = true,
+    NameDistance = 260,
+    GlowDistance = 260,
+    TracerDistance = 380,
+    SkeletonDistance = 240,
+    HealthDistance = 360,
 
     CombatEnabled = false,
     ShowFOV = false,
@@ -77,6 +87,9 @@ local State = {
     AimPriority = "Crosshair",
     AimDistance = 650,
     LockTarget = false,
+    AimRequireFOV = true,
+    AimDeadzone = 2,
+    RetargetDelay = 0.12,
 
     RenderPriority = "Crosshair",
     MaxRenderedTargets = 12,
@@ -237,6 +250,62 @@ local function bindControl(name, control)
     return control
 end
 
+local function setControlValue(name, value)
+    local control = App.Controls[name]
+    if control and control.Set then
+        control:Set(value)
+    end
+end
+
+local function applyVisualPreset(mode)
+    if mode == "Low" then
+        setControlValue("ESPFluid", true)
+        setControlValue("ESPFluidness", 0.28)
+        setControlValue("DynamicQuality", true)
+        setControlValue("OnlyScreenTargets", true)
+        setControlValue("MaxRenderedTargets", 7)
+        setControlValue("MaxSkeletonTargets", 2)
+        setControlValue("MaxTracerTargets", 4)
+        setControlValue("MaxNameTargets", 5)
+        setControlValue("TargetRefreshRate", 0.10)
+        setControlValue("GlowDistance", 180)
+        setControlValue("SkeletonDistance", 165)
+        setControlValue("TracerDistance", 250)
+        setControlValue("HealthDistance", 260)
+        setControlValue("NameDistance", 180)
+    elseif mode == "Quality" then
+        setControlValue("ESPFluid", true)
+        setControlValue("ESPFluidness", 0.42)
+        setControlValue("DynamicQuality", false)
+        setControlValue("OnlyScreenTargets", true)
+        setControlValue("MaxRenderedTargets", 14)
+        setControlValue("MaxSkeletonTargets", 6)
+        setControlValue("MaxTracerTargets", 9)
+        setControlValue("MaxNameTargets", 10)
+        setControlValue("TargetRefreshRate", 0.07)
+        setControlValue("GlowDistance", 320)
+        setControlValue("SkeletonDistance", 280)
+        setControlValue("TracerDistance", 420)
+        setControlValue("HealthDistance", 420)
+        setControlValue("NameDistance", 280)
+    else
+        setControlValue("ESPFluid", true)
+        setControlValue("ESPFluidness", 0.34)
+        setControlValue("DynamicQuality", true)
+        setControlValue("OnlyScreenTargets", true)
+        setControlValue("MaxRenderedTargets", 10)
+        setControlValue("MaxSkeletonTargets", 4)
+        setControlValue("MaxTracerTargets", 6)
+        setControlValue("MaxNameTargets", 7)
+        setControlValue("TargetRefreshRate", 0.09)
+        setControlValue("GlowDistance", 240)
+        setControlValue("SkeletonDistance", 220)
+        setControlValue("TracerDistance", 340)
+        setControlValue("HealthDistance", 340)
+        setControlValue("NameDistance", 230)
+    end
+end
+
 local function serializeColor3(c)
     return {R = c.R, G = c.G, B = c.B}
 end
@@ -340,6 +409,15 @@ local function applyLoadedState(data)
     setIf("ESPNameSize", tonumber(data.ESPNameSize) or State.ESPNameSize)
     setIf("ESPGlow", data.ESPGlow == true)
     setIf("CharacterPreview", data.CharacterPreview == true)
+    setIf("ESPFluid", data.ESPFluid ~= false)
+    setIf("ESPFluidness", tonumber(data.ESPFluidness) or State.ESPFluidness)
+    setIf("DynamicQuality", data.DynamicQuality ~= false)
+    setIf("OnlyScreenTargets", data.OnlyScreenTargets ~= false)
+    setIf("NameDistance", tonumber(data.NameDistance) or State.NameDistance)
+    setIf("GlowDistance", tonumber(data.GlowDistance) or State.GlowDistance)
+    setIf("TracerDistance", tonumber(data.TracerDistance) or State.TracerDistance)
+    setIf("SkeletonDistance", tonumber(data.SkeletonDistance) or State.SkeletonDistance)
+    setIf("HealthDistance", tonumber(data.HealthDistance) or State.HealthDistance)
     setIf("CombatEnabled", data.CombatEnabled == true)
     setIf("ShowFOV", data.ShowFOV == true)
     setIf("FOV", tonumber(data.FOV) or State.FOV)
@@ -350,6 +428,9 @@ local function applyLoadedState(data)
     setIf("AimPriority", data.AimPriority or State.AimPriority)
     setIf("AimDistance", tonumber(data.AimDistance) or State.AimDistance)
     setIf("LockTarget", data.LockTarget == true)
+    setIf("AimRequireFOV", data.AimRequireFOV ~= false)
+    setIf("AimDeadzone", tonumber(data.AimDeadzone) or State.AimDeadzone)
+    setIf("RetargetDelay", tonumber(data.RetargetDelay) or State.RetargetDelay)
     setIf("RenderPriority", data.RenderPriority or State.RenderPriority)
     setIf("MaxRenderedTargets", tonumber(data.MaxRenderedTargets) or State.MaxRenderedTargets)
     setIf("MaxSkeletonTargets", tonumber(data.MaxSkeletonTargets) or State.MaxSkeletonTargets)
@@ -401,6 +482,15 @@ local function saveCurrentConfig(name)
         ESPNameSize = State.ESPNameSize,
         ESPGlow = State.ESPGlow,
         CharacterPreview = State.CharacterPreview,
+        ESPFluid = State.ESPFluid,
+        ESPFluidness = State.ESPFluidness,
+        DynamicQuality = State.DynamicQuality,
+        OnlyScreenTargets = State.OnlyScreenTargets,
+        NameDistance = State.NameDistance,
+        GlowDistance = State.GlowDistance,
+        TracerDistance = State.TracerDistance,
+        SkeletonDistance = State.SkeletonDistance,
+        HealthDistance = State.HealthDistance,
         CombatEnabled = State.CombatEnabled,
         ShowFOV = State.ShowFOV,
         FOV = State.FOV,
@@ -411,6 +501,9 @@ local function saveCurrentConfig(name)
         AimPriority = State.AimPriority,
         AimDistance = State.AimDistance,
         LockTarget = State.LockTarget,
+        AimRequireFOV = State.AimRequireFOV,
+        AimDeadzone = State.AimDeadzone,
+        RetargetDelay = State.RetargetDelay,
         RenderPriority = State.RenderPriority,
         MaxRenderedTargets = State.MaxRenderedTargets,
         MaxSkeletonTargets = State.MaxSkeletonTargets,
@@ -1188,6 +1281,7 @@ local function createESPRecord(target)
         NameShadow = nameShadow,
         NameText = nameText,
         NameCache = {Text = "", Size = -1, X = -9999, Y = -9999, R = -1, G = -1, B = -1},
+        SmoothState = nil,
     }
     return App.ESP[target]
 end
@@ -1365,7 +1459,15 @@ local function refreshTargetCache()
         if root and hum and hum.Health > 0 then
             local dist = distanceTo(root.Position)
             if dist <= (maxDistance + 40) then
-                table.insert(pool, {Model = model, Score = getPriorityScore(model), Distance = dist})
+                if State.OnlyScreenTargets then
+                    local aimPart = getTargetPart(model) or root
+                    local pos, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
+                    if onScreen and pos.Z > 0 then
+                        table.insert(pool, {Model = model, Score = getPriorityScore(model), Distance = dist})
+                    end
+                else
+                    table.insert(pool, {Model = model, Score = getPriorityScore(model), Distance = dist})
+                end
             end
         end
     end
@@ -1482,6 +1584,7 @@ local function getAimTarget()
     local center = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
     local radius = math.max(0, tonumber(State.FOV) or 0)
     local maxDist = math.max(50, tonumber(State.AimDistance) or 650)
+    local now = tick()
 
     local function validPart(part)
         if not part or not part.Parent then return false end
@@ -1493,12 +1596,16 @@ local function getAimTarget()
         local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
         if not onScreen or screenPos.Z <= 0 then return false end
         local diff = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-        if radius > 0 and diff > radius then return false end
+        if State.AimRequireFOV and radius > 0 and diff > radius then return false end
         if State.WallCheck and not passesWallCheck(model, part) then return false end
         return true
     end
 
     if State.LockTarget and App.CurrentAimTarget and validPart(App.CurrentAimTarget) then
+        return App.CurrentAimTarget
+    end
+
+    if App.CurrentAimTarget and App.AimTargetChangedAt and (now - App.AimTargetChangedAt) < math.max(0, tonumber(State.RetargetDelay) or 0) and validPart(App.CurrentAimTarget) then
         return App.CurrentAimTarget
     end
 
@@ -1515,7 +1622,7 @@ local function getAimTarget()
                 local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
                 if onScreen and screenPos.Z > 0 then
                     local diff = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-                    if (radius <= 0 and diff <= 12) or (radius > 0 and diff <= radius) then
+                    if (not State.AimRequireFOV) or radius <= 0 or diff <= radius then
                         local metric = diff
                         if State.AimPriority == "Distance" then
                             metric = dist
@@ -1532,14 +1639,26 @@ local function getAimTarget()
         end
     end
 
-    App.CurrentAimTarget = bestPart
-    return bestPart
+    if bestPart ~= App.CurrentAimTarget then
+        App.CurrentAimTarget = bestPart
+        App.AimTargetChangedAt = now
+    end
+    return App.CurrentAimTarget
 end
 
 local function updateAim()
     if not State.CombatEnabled or not State.AimActive then return end
     local targetPart = getAimTarget()
     if not targetPart then return end
+
+    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+    if onScreen and screenPos.Z > 0 then
+        local center = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
+        local diff = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+        if diff <= math.max(0, tonumber(State.AimDeadzone) or 0) then
+            return
+        end
+    end
 
     local camPos = Camera.CFrame.Position
     local desired = CFrame.new(camPos, targetPart.Position)
@@ -1726,13 +1845,52 @@ local function updateESP()
                     live[target] = true
                     local c = State.ESPColor
 
-                    local dynamicGlowDistance = heavyCount >= 10 and 160 or (heavyCount >= 6 and 220 or 320)
-                    local nameDistance = heavyCount >= 10 and 180 or 280
-                    local tracerDistance = heavyCount >= 10 and 240 or 400
-                    local skeletonDistance = heavyCount >= 10 and 180 or 260
-                    local healthDistance = heavyCount >= 10 and 260 or 420
+                    if State.ESPFluid then
+                        local alpha = math.clamp(tonumber(State.ESPFluidness) or 0.34, 0.08, 0.9)
+                        local s = rec.SmoothState
+                        if not s then
+                            s = {x = boxX, y = boxY, w = boxW, h = boxH, hx = headPoint.X, hy = headPoint.Y, rx = rootPoint.X, ry = rootPoint.Y}
+                            rec.SmoothState = s
+                        else
+                            s.x = s.x + ((boxX - s.x) * alpha)
+                            s.y = s.y + ((boxY - s.y) * alpha)
+                            s.w = s.w + ((boxW - s.w) * alpha)
+                            s.h = s.h + ((boxH - s.h) * alpha)
+                            s.hx = s.hx + ((headPoint.X - s.hx) * alpha)
+                            s.hy = s.hy + ((headPoint.Y - s.hy) * alpha)
+                            s.rx = s.rx + ((rootPoint.X - s.rx) * alpha)
+                            s.ry = s.ry + ((rootPoint.Y - s.ry) * alpha)
+                        end
+                        boxX, boxY, boxW, boxH = s.x, s.y, s.w, s.h
+                        headPoint = Vector2.new(s.hx, s.hy)
+                        rootPoint = Vector2.new(s.rx, s.ry)
+                    else
+                        rec.SmoothState = nil
+                    end
 
-                    local glowEnabled = State.ESPGlow and dist <= dynamicGlowDistance
+                    local glowDistance = State.GlowDistance
+                    local nameDistance = State.NameDistance
+                    local tracerDistance = State.TracerDistance
+                    local skeletonDistance = State.SkeletonDistance
+                    local healthDistance = State.HealthDistance
+
+                    if State.DynamicQuality then
+                        local mul = 1
+                        if heavyCount >= 12 then
+                            mul = 0.72
+                        elseif heavyCount >= 8 then
+                            mul = 0.84
+                        elseif heavyCount >= 5 then
+                            mul = 0.92
+                        end
+                        glowDistance = glowDistance * mul
+                        nameDistance = nameDistance * mul
+                        tracerDistance = tracerDistance * mul
+                        skeletonDistance = skeletonDistance * mul
+                        healthDistance = healthDistance * mul
+                    end
+
+                    local glowEnabled = State.ESPGlow and dist <= glowDistance
                     local showTracer = State.Tracers and rank <= State.MaxTracerTargets and dist <= tracerDistance
                     local showSkeleton = State.Skeleton and rank <= State.MaxSkeletonTargets and dist <= skeletonDistance
                     local showNames = State.ESPNames and rank <= State.MaxNameTargets and dist <= nameDistance
@@ -1794,6 +1952,7 @@ local function updateESP()
     end
     for target, rec in pairs(App.ESP) do
         if not live[target] then
+            rec.SmoothState = nil
             hideRecord(rec)
             if not target or not target.Parent then
                 removeESPRecord(target)
@@ -2184,6 +2343,37 @@ local function buildPages()
         notify("Preview", "Character preview refreshed.")
     end)
 
+    local homeTools = createSection(main, "Home Tools", "Quick presets and live info")
+    createButton(homeTools, "Preset Low", "Menos carga para lobbys llenos", "Low", function()
+        applyVisualPreset("Low")
+        notify("Preset", "Modo Low aplicado.")
+    end)
+    createButton(homeTools, "Preset Balanced", "Buen equilibrio entre look y FPS", "Balanced", function()
+        applyVisualPreset("Balanced")
+        notify("Preset", "Modo Balanced aplicado.")
+    end)
+    createButton(homeTools, "Preset Quality", "Más calidad visual manteniendo fluidez", "Quality", function()
+        applyVisualPreset("Quality")
+        notify("Preset", "Modo Quality aplicado.")
+    end)
+    local liveStats = controlHolder(homeTools, 92)
+    local fpsLabel = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,10), Size=UDim2.new(1,-24,0,16), Text="FPS: --", Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+    fpsLabel.Parent = liveStats
+    registerTheme(fpsLabel, "TextColor3", "Text")
+    local tgtLabel = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,30), Size=UDim2.new(1,-24,0,16), Text="Targets: 0", Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
+    tgtLabel.Parent = liveStats
+    registerTheme(tgtLabel, "TextColor3", "Sub")
+    local modeLabel = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,50), Size=UDim2.new(1,-24,0,16), Text="Aim: OFF", Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
+    modeLabel.Parent = liveStats
+    registerTheme(modeLabel, "TextColor3", "Sub")
+    local renderLabel = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,68), Size=UDim2.new(1,-24,0,16), Text="Render Budget: --", Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
+    renderLabel.Parent = liveStats
+    registerTheme(renderLabel, "TextColor3", "Sub")
+    App.HomeStats.FPS = fpsLabel
+    App.HomeStats.Targets = tgtLabel
+    App.HomeStats.Aim = modeLabel
+    App.HomeStats.Render = renderLabel
+
     local vis = createSection(visual, "ESP", "Visual options start disabled and you activate what you want")
     bindControl("ESPEnabled", createToggle(vis, "Enable ESP", "Master toggle for the ESP system", false, function(v) State.ESPEnabled = v end))
     bindControl("ESPPlayers", createToggle(vis, "Players", "Show ESP for players", false, function(v) State.ESPPlayers = v end))
@@ -2207,6 +2397,9 @@ local function buildPages()
         rebuildPreview()
         refreshMenuState()
     end))
+    local visFlow = createSection(visual, "Fluidez", "Controles para que las ESP se vean más suaves")
+    bindControl("ESPFluid", createToggle(visFlow, "Fluid ESP", "Suaviza el movimiento de box, names y líneas", State.ESPFluid, function(v) State.ESPFluid = v end))
+    bindControl("ESPFluidness", createSlider(visFlow, "Fluid Strength", "Más alto = más suave", 0.08, 0.85, State.ESPFluidness, 0.01, function(v) State.ESPFluidness = v end))
 
     local cbt = createSection(combat, "Combat / Aim", "All options start disabled")
     bindControl("CombatEnabled", createToggle(cbt, "Enable Combat Page", "Master toggle for this tab", false, function(v)
@@ -2233,6 +2426,15 @@ local function buildPages()
         State.LockTarget = v
         if not v then App.CurrentAimTarget = nil end
     end))
+    bindControl("AimRequireFOV", createToggle(cbt, "Require FOV", "Solo toma targets dentro del círculo", State.AimRequireFOV, function(v)
+        State.AimRequireFOV = v
+    end))
+    bindControl("AimDeadzone", createSlider(cbt, "Deadzone", "Evita micro temblores cuando ya está casi en el target", 0, 25, State.AimDeadzone, 0.5, function(v)
+        State.AimDeadzone = v
+    end))
+    bindControl("RetargetDelay", createSlider(cbt, "Retarget Delay", "Cuánto espera antes de saltar a otro target", 0, 0.5, State.RetargetDelay, 0.01, function(v)
+        State.RetargetDelay = v
+    end))
     bindControl("WallCheck", createToggle(cbt, "Wall Check", "No pegar a través de paredes", false, function(v) State.WallCheck = v end))
     createParagraph(cbt, "Aim Status", "Toggle mode stays on until you press the key again. Hold mode only aims while the key is pressed. The FOV stays visible even when the menu is hidden.")
 
@@ -2244,6 +2446,25 @@ local function buildPages()
     bindControl("MaxNameTargets", createSlider(perfMain, "Max Name Targets", "Textos solo para los primeros", 0, 20, State.MaxNameTargets, 1, function(v) State.MaxNameTargets = v end))
     bindControl("TargetRefreshRate", createSlider(perfMain, "Refresh Rate", "Cada cuánto se recalcula la lista completa", 0.03, 0.25, State.TargetRefreshRate, 0.01, function(v) State.TargetRefreshRate = v end))
     createParagraph(perfMain, "Tip", "Se mantiene el glow, pero se limita cuántos objetivos usan skeleton, tracer y texto para que no se pegue con mucha gente.")
+    bindControl("DynamicQuality", createToggle(perfMain, "Dynamic Quality", "Baja distancias y glow automáticamente cuando hay mucha gente", State.DynamicQuality, function(v) State.DynamicQuality = v end))
+    bindControl("OnlyScreenTargets", createToggle(perfMain, "Only On Screen", "Prioriza solo targets visibles en pantalla", State.OnlyScreenTargets, function(v) State.OnlyScreenTargets = v end))
+    bindControl("GlowDistance", createSlider(perfMain, "Glow Distance", "Hasta dónde llega el glow de ESP", 80, 600, State.GlowDistance, 10, function(v) State.GlowDistance = v end))
+    bindControl("SkeletonDistance", createSlider(perfMain, "Skeleton Distance", "Hasta dónde se permite skeleton", 80, 600, State.SkeletonDistance, 10, function(v) State.SkeletonDistance = v end))
+    bindControl("TracerDistance", createSlider(perfMain, "Tracer Distance", "Hasta dónde se permiten líneas", 80, 900, State.TracerDistance, 10, function(v) State.TracerDistance = v end))
+    bindControl("HealthDistance", createSlider(perfMain, "Health Distance", "Hasta dónde se ve la barra de vida", 80, 900, State.HealthDistance, 10, function(v) State.HealthDistance = v end))
+    bindControl("NameDistance", createSlider(perfMain, "Name Distance", "Hasta dónde se ven los nombres", 80, 700, State.NameDistance, 10, function(v) State.NameDistance = v end))
+    createButton(perfMain, "Preset Low", "Aplicar preset liviano", "Low", function()
+        applyVisualPreset("Low")
+        notify("Perf", "Preset Low aplicado.")
+    end)
+    createButton(perfMain, "Preset Balanced", "Aplicar preset equilibrado", "Balanced", function()
+        applyVisualPreset("Balanced")
+        notify("Perf", "Preset Balanced aplicado.")
+    end)
+    createButton(perfMain, "Preset Quality", "Aplicar preset de calidad", "Quality", function()
+        applyVisualPreset("Quality")
+        notify("Perf", "Preset Quality aplicado.")
+    end)
 
     local perfLobby = createSection(perf, "Lobby", "Todos los jugadores del lobby ordenados por fila con su logo de Roblox")
     createButton(perfLobby, "Return Camera", "Vuelve la cámara a tu personaje", "Self", function()
@@ -2416,10 +2637,14 @@ local function startLoop()
     local targetTick = 0
     local espTick = 0
     local lobbyTick = 0
+    local fpsTick = 0
+    local fpsFrames = 0
     table.insert(App.Connections, RunService.RenderStepped:Connect(function(dt)
         targetTick += dt
         espTick += dt
         lobbyTick += dt
+        fpsTick += dt
+        fpsFrames += 1
 
         if targetTick >= State.TargetRefreshRate then
             targetTick = 0
@@ -2427,13 +2652,21 @@ local function startLoop()
         end
 
         local count = #App.TargetCache
-        local espInterval = 0.015
-        if count >= 12 then
-            espInterval = 0.03
-        elseif count >= 8 then
-            espInterval = 0.024
-        elseif count >= 4 then
-            espInterval = 0.018
+        local espInterval = 0.02
+        if State.DynamicQuality then
+            if count >= 12 then
+                espInterval = 0.04
+            elseif count >= 8 then
+                espInterval = 0.032
+            elseif count >= 4 then
+                espInterval = 0.025
+            end
+        else
+            if count >= 12 then
+                espInterval = 0.03
+            elseif count >= 8 then
+                espInterval = 0.025
+            end
         end
 
         if espTick >= espInterval then
@@ -2443,6 +2676,18 @@ local function startLoop()
 
         updateAim()
         updateFOV()
+
+        if fpsTick >= 0.5 then
+            local fps = math.floor(fpsFrames / fpsTick + 0.5)
+            fpsFrames = 0
+            fpsTick = 0
+            if App.HomeStats and App.HomeStats.FPS then
+                App.HomeStats.FPS.Text = "FPS: " .. tostring(fps)
+                App.HomeStats.Targets.Text = "Targets: " .. tostring(#App.TargetCache)
+                App.HomeStats.Aim.Text = "Aim: " .. (State.AimActive and "ON" or "OFF") .. "  |  Mode: " .. tostring(State.AimMode)
+                App.HomeStats.Render.Text = "Render Budget: " .. tostring(State.MaxRenderedTargets) .. " / Skeleton " .. tostring(State.MaxSkeletonTargets)
+            end
+        end
 
         if lobbyTick >= 4.0 then
             lobbyTick = 0
@@ -2501,3 +2746,4 @@ task.delay(5, function()
     App.Root.Visible = true
     notify("Nexhidera", "Menu loaded correctly.")
 end)
+
