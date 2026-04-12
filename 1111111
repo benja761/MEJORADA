@@ -1,3 +1,4 @@
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -54,6 +55,10 @@ local State = {
     HealthBarSide = "Left",
     HealthBarThickness = 4,
     Skeleton = false,
+    SkeletonType = "Current",
+    SkeletonThickness = 1.6,
+    ESPNames = false,
+    ESPNameSize = 13,
     ESPGlow = false,
     CharacterPreview = false,
 
@@ -120,6 +125,41 @@ end
 
 local function safeDisconnect(c)
     if c and typeof(c) == "RBXScriptConnection" then c:Disconnect() end
+end
+
+local function inputToText(bind)
+    if not bind then return "None" end
+    return bind.Name or tostring(bind)
+end
+
+local function inputMatches(bind, input)
+    if not bind or not input or typeof(bind) ~= "EnumItem" then return false end
+    if bind.EnumType == Enum.KeyCode then
+        return input.KeyCode == bind
+    elseif bind.EnumType == Enum.UserInputType then
+        return input.UserInputType == bind
+    end
+    return false
+end
+
+local function colorLerp(a, b, t)
+    t = math.clamp(t or 0, 0, 1)
+    return Color3.new(
+        a.R + ((b.R - a.R) * t),
+        a.G + ((b.G - a.G) * t),
+        a.B + ((b.B - a.B) * t)
+    )
+end
+
+local function getHealthColor(pct)
+    pct = math.clamp(pct or 0, 0, 1)
+    local red = Color3.fromRGB(255, 70, 70)
+    local yellow = Color3.fromRGB(255, 220, 75)
+    local green = Color3.fromRGB(110, 255, 145)
+    if pct <= 0.5 then
+        return colorLerp(red, yellow, pct / 0.5)
+    end
+    return colorLerp(yellow, green, (pct - 0.5) / 0.5)
 end
 
 local function registerTheme(inst, prop, key)
@@ -448,7 +488,7 @@ local function createSlider(parent, title, desc, min, max, default, step, cb)
         set(min + (max - min) * pct)
     end
     bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true update(input.Position.X) end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; update(input.Position.X) end
     end)
     table.insert(App.Connections, UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then update(input.Position.X) end
@@ -469,7 +509,7 @@ local function createKeybind(parent, title, desc, default, cb)
     d.Parent = h
     registerTheme(d, "TextColor3", "Sub")
 
-    local b = create("TextButton", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,96,0,24), Text=default and default.Name or "None", Font=Enum.Font.GothamBold, TextSize=12, AutoButtonColor=false, BorderSizePixel=0})
+    local b = create("TextButton", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,110,0,24), Text=inputToText(default), Font=Enum.Font.GothamBold, TextSize=12, AutoButtonColor=false, BorderSizePixel=0})
     b.Parent = h
     registerTheme(b, "BackgroundColor3", "Main")
     registerTheme(b, "TextColor3", "Text")
@@ -481,7 +521,7 @@ local function createKeybind(parent, title, desc, default, cb)
 
     local function set(v)
         state = v
-        b.Text = state and state.Name or "None"
+        b.Text = inputToText(state)
         if cb then cb(v) end
     end
 
@@ -492,10 +532,19 @@ local function createKeybind(parent, title, desc, default, cb)
 
     table.insert(App.Connections, UserInputService.InputBegan:Connect(function(input, gp)
         if gp or not waiting then return end
-        local code = input.KeyCode
-        if code and code ~= Enum.KeyCode.Unknown then
+        local picked = nil
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            if input.KeyCode and input.KeyCode ~= Enum.KeyCode.Unknown then
+                picked = input.KeyCode
+            end
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.MouseButton2
+            or input.UserInputType == Enum.UserInputType.MouseButton3 then
+            picked = input.UserInputType
+        end
+        if picked then
             waiting = false
-            set(code)
+            set(picked)
         end
     end))
 
@@ -681,23 +730,21 @@ local function createESPRecord(target)
     local cornerRoundGlow = {}
     local cornerRound = {}
     for i = 1, 4 do
-        local cg = Drawing.new("Circle")
+        local cg = Drawing.new("Line")
         cg.Visible = false
-        cg.Filled = false
         cg.Thickness = 4
         cg.Transparency = 0.16
         cornerRoundGlow[i] = cg
 
-        local c = Drawing.new("Circle")
+        local c = Drawing.new("Line")
         c.Visible = false
-        c.Filled = false
-        c.Thickness = 1.4
+        c.Thickness = 1.5
         cornerRound[i] = c
     end
 
     local healthGlowLine = Drawing.new("Line")
     healthGlowLine.Visible = false
-    healthGlowLine.Transparency = 0.16
+    healthGlowLine.Transparency = 0.12
 
     local healthBackLine = Drawing.new("Line")
     healthBackLine.Visible = false
@@ -705,9 +752,28 @@ local function createESPRecord(target)
     local healthLine = Drawing.new("Line")
     healthLine.Visible = false
 
+    local healthBackCaps, healthFillCaps, healthGlowCaps = {}, {}, {}
+    for i = 1, 2 do
+        local bc = Drawing.new("Circle")
+        bc.Visible = false
+        bc.Filled = true
+        healthBackCaps[i] = bc
+
+        local fc = Drawing.new("Circle")
+        fc.Visible = false
+        fc.Filled = true
+        healthFillCaps[i] = fc
+
+        local gc = Drawing.new("Circle")
+        gc.Visible = false
+        gc.Filled = true
+        gc.Transparency = 0.12
+        healthGlowCaps[i] = gc
+    end
+
     local skeletonGlow = {}
     local skeleton = {}
-    for i = 1, 12 do
+    for i = 1, 14 do
         local lg = Drawing.new("Line")
         lg.Visible = false
         lg.Thickness = 4
@@ -731,6 +797,19 @@ local function createESPRecord(target)
     headCircle.Filled = false
     headCircle.Thickness = 1.5
 
+    local nameShadow = Drawing.new("Text")
+    nameShadow.Visible = false
+    nameShadow.Center = true
+    nameShadow.Outline = true
+    nameShadow.Font = 2
+    nameShadow.Transparency = 0.55
+
+    local nameText = Drawing.new("Text")
+    nameText.Visible = false
+    nameText.Center = true
+    nameText.Outline = true
+    nameText.Font = 2
+
     App.ESP[target] = {
         Target = target,
         Folder = folder,
@@ -745,10 +824,15 @@ local function createESPRecord(target)
         HealthGlowLine = healthGlowLine,
         HealthBackLine = healthBackLine,
         HealthLine = healthLine,
+        HealthBackCaps = healthBackCaps,
+        HealthFillCaps = healthFillCaps,
+        HealthGlowCaps = healthGlowCaps,
         SkeletonGlow = skeletonGlow,
         Skeleton = skeleton,
         HeadGlow = headGlow,
         HeadCircle = headCircle,
+        NameShadow = nameShadow,
+        NameText = nameText,
     }
     return App.ESP[target]
 end
@@ -765,10 +849,15 @@ local function removeESPRecord(target)
     pcall(function() rec.HealthLine:Remove() end)
     pcall(function() rec.HeadGlow:Remove() end)
     pcall(function() rec.HeadCircle:Remove() end)
+    pcall(function() rec.NameShadow:Remove() end)
+    pcall(function() rec.NameText:Remove() end)
     for _, l in ipairs(rec.CornerGlow) do pcall(function() l:Remove() end) end
     for _, l in ipairs(rec.Corners) do pcall(function() l:Remove() end) end
     for _, c in ipairs(rec.CornerRoundGlow) do pcall(function() c:Remove() end) end
     for _, c in ipairs(rec.CornerRound) do pcall(function() c:Remove() end) end
+    for _, c in ipairs(rec.HealthBackCaps) do pcall(function() c:Remove() end) end
+    for _, c in ipairs(rec.HealthFillCaps) do pcall(function() c:Remove() end) end
+    for _, c in ipairs(rec.HealthGlowCaps) do pcall(function() c:Remove() end) end
     for _, l in ipairs(rec.SkeletonGlow) do pcall(function() l:Remove() end) end
     for _, l in ipairs(rec.Skeleton) do pcall(function() l:Remove() end) end
     if rec.Folder then pcall(function() rec.Folder:Destroy() end) end
@@ -785,10 +874,15 @@ local function hideRecord(rec)
     rec.HealthLine.Visible = false
     rec.HeadGlow.Visible = false
     rec.HeadCircle.Visible = false
+    rec.NameShadow.Visible = false
+    rec.NameText.Visible = false
     for _, l in ipairs(rec.CornerGlow) do l.Visible = false end
     for _, l in ipairs(rec.Corners) do l.Visible = false end
     for _, c in ipairs(rec.CornerRoundGlow) do c.Visible = false end
     for _, c in ipairs(rec.CornerRound) do c.Visible = false end
+    for _, c in ipairs(rec.HealthBackCaps) do c.Visible = false end
+    for _, c in ipairs(rec.HealthFillCaps) do c.Visible = false end
+    for _, c in ipairs(rec.HealthGlowCaps) do c.Visible = false end
     for _, l in ipairs(rec.SkeletonGlow) do l.Visible = false end
     for _, l in ipairs(rec.Skeleton) do l.Visible = false end
 end
@@ -870,23 +964,37 @@ local function drawSkeleton(rec, model, color, boxH)
     local rll = getPartByNames(model, {"RightLowerLeg"})
     local rfl = getPartByNames(model, {"RightFoot"})
 
-    local segments = {
-        {head, upper},
-        {upper, lower},
-        {upper, lua},
-        {lua, lla},
-        {lla, lha},
-        {upper, rua},
-        {rua, rla},
-        {rla, rha},
-        {lower, lul},
-        {lul, lll},
-        {lll, lfl},
-        {lower, rul},
-        {rul, rll},
-        {rll, rfl},
-    }
+    local segments
+    if State.SkeletonType == "Normal" then
+        segments = {
+            {head, upper},
+            {upper, lower},
+            {upper, lua or lla or lha},
+            {upper, rua or rla or rha},
+            {lower, lul or lll or lfl},
+            {lower, rul or rll or rfl},
+        }
+    else
+        segments = {
+            {head, upper},
+            {upper, lower},
+            {upper, lua},
+            {lua, lla},
+            {lla, lha},
+            {upper, rua},
+            {rua, rla},
+            {rla, rha},
+            {lower, lul},
+            {lul, lll},
+            {lll, lfl},
+            {lower, rul},
+            {rul, rll},
+            {rll, rfl},
+        }
+    end
 
+    local baseThickness = math.clamp(tonumber(State.SkeletonThickness) or 1.6, 1, 8)
+    local glowThickness = baseThickness + 2.4
     local index = 1
     for _, seg in ipairs(segments) do
         if index > #rec.Skeleton then break end
@@ -898,6 +1006,8 @@ local function drawSkeleton(rec, model, color, boxH)
             if sa and sb then
                 local gl = rec.SkeletonGlow[index]
                 local ln = rec.Skeleton[index]
+                gl.Thickness = glowThickness
+                ln.Thickness = baseThickness
                 if State.ESPGlow then
                     gl.From = sa
                     gl.To = sb
@@ -916,15 +1026,18 @@ local function drawSkeleton(rec, model, color, boxH)
     local headPos = partToScreen(head)
     if headPos then
         local radius = math.clamp(boxH * 0.11, 4, 18)
+        local headThickness = math.max(1.2, baseThickness * 0.95)
         if State.ESPGlow then
             rec.HeadGlow.Position = headPos
             rec.HeadGlow.Radius = radius
             rec.HeadGlow.Color = color
+            rec.HeadGlow.Thickness = glowThickness
             rec.HeadGlow.Visible = true
         end
         rec.HeadCircle.Position = headPos
         rec.HeadCircle.Radius = radius
         rec.HeadCircle.Color = color
+        rec.HeadCircle.Thickness = headThickness
         rec.HeadCircle.Visible = true
     end
 end
@@ -974,19 +1087,27 @@ end
 
 local function drawCornerBox(rec, x, y, w, h, color)
     local lenX, lenY = w * 0.24, h * 0.24
+    local curveX = math.max(2, lenX * 0.34)
+    local curveY = math.max(2, lenY * 0.34)
     local pts = {
-        {Vector2.new(x, y), Vector2.new(x + lenX, y)}, {Vector2.new(x, y), Vector2.new(x, y + lenY)},
-        {Vector2.new(x+w, y), Vector2.new(x+w - lenX, y)}, {Vector2.new(x+w, y), Vector2.new(x+w, y + lenY)},
-        {Vector2.new(x, y+h), Vector2.new(x + lenX, y+h)}, {Vector2.new(x, y+h), Vector2.new(x, y+h - lenY)},
-        {Vector2.new(x+w, y+h), Vector2.new(x+w - lenX, y+h)}, {Vector2.new(x+w, y+h), Vector2.new(x+w, y+h - lenY)},
+        {Vector2.new(x + curveX, y), Vector2.new(x + lenX, y)},
+        {Vector2.new(x, y + curveY), Vector2.new(x, y + lenY)},
+        {Vector2.new(x + w - lenX, y), Vector2.new(x + w - curveX, y)},
+        {Vector2.new(x + w, y + curveY), Vector2.new(x + w, y + lenY)},
+        {Vector2.new(x + curveX, y + h), Vector2.new(x + lenX, y + h)},
+        {Vector2.new(x, y + h - lenY), Vector2.new(x, y + h - curveY)},
+        {Vector2.new(x + w - lenX, y + h), Vector2.new(x + w - curveX, y + h)},
+        {Vector2.new(x + w, y + h - lenY), Vector2.new(x + w, y + h - curveY)},
     }
     for i, l in ipairs(rec.Corners) do
         l.From = pts[i][1]
         l.To = pts[i][2]
         l.Color = color
+        l.Thickness = 1.5
         l.Visible = true
         local g = rec.CornerGlow[i]
         g.Visible = false
+        g.Thickness = 4
         if State.ESPGlow then
             g.From = pts[i][1]
             g.To = pts[i][2]
@@ -995,38 +1116,73 @@ local function drawCornerBox(rec, x, y, w, h, color)
         end
     end
 
-    local radius = math.clamp(math.min(w, h) * 0.055, 2, 7)
-    local cornerPoints = {
-        Vector2.new(x, y),
-        Vector2.new(x + w, y),
-        Vector2.new(x, y + h),
-        Vector2.new(x + w, y + h)
+    local curves = {
+        {Vector2.new(x + curveX, y), Vector2.new(x, y + curveY)},
+        {Vector2.new(x + w - curveX, y), Vector2.new(x + w, y + curveY)},
+        {Vector2.new(x, y + h - curveY), Vector2.new(x + curveX, y + h)},
+        {Vector2.new(x + w - curveX, y + h), Vector2.new(x + w, y + h - curveY)},
     }
-    for i, dot in ipairs(rec.CornerRound) do
-        dot.Position = cornerPoints[i]
-        dot.Radius = radius
-        dot.Color = color
-        dot.Visible = true
-
-        local glow = rec.CornerRoundGlow[i]
-        glow.Visible = false
+    for i, l in ipairs(rec.CornerRound) do
+        l.From = curves[i][1]
+        l.To = curves[i][2]
+        l.Color = color
+        l.Thickness = 1.5
+        l.Visible = true
+        local g = rec.CornerRoundGlow[i]
+        g.Visible = false
+        g.Thickness = 4
         if State.ESPGlow then
-            glow.Position = cornerPoints[i]
-            glow.Radius = radius
-            glow.Color = color
-            glow.Visible = true
+            g.From = curves[i][1]
+            g.To = curves[i][2]
+            g.Color = color
+            g.Visible = true
         end
     end
+end
+
+local function drawName(rec, displayText, x, y, w, color)
+    rec.NameShadow.Visible = false
+    rec.NameText.Visible = false
+    if not State.ESPNames then return end
+
+    local size = math.clamp(tonumber(State.ESPNameSize) or 13, 10, 28)
+    local pos = Vector2.new(x + (w * 0.5), y - size - 2)
+
+    rec.NameShadow.Text = displayText
+    rec.NameShadow.Size = size + 1
+    rec.NameShadow.Position = pos + Vector2.new(1, 1)
+    rec.NameShadow.Color = Color3.fromRGB(8, 8, 10)
+    rec.NameShadow.Visible = true
+
+    rec.NameText.Text = displayText
+    rec.NameText.Size = size
+    rec.NameText.Position = pos
+    rec.NameText.Color = color
+    rec.NameText.Visible = true
 end
 
 local function drawHealth(rec, x, y, w, h, healthPct)
     rec.HealthGlowLine.Visible = false
     rec.HealthBackLine.Visible = false
     rec.HealthLine.Visible = false
+    for _, c in ipairs(rec.HealthBackCaps) do c.Visible = false end
+    for _, c in ipairs(rec.HealthFillCaps) do c.Visible = false end
+    for _, c in ipairs(rec.HealthGlowCaps) do c.Visible = false end
     if not State.HealthBar then return end
 
-    local hpColor = Color3.fromRGB(255 - math.floor(255 * healthPct), math.floor(255 * healthPct), 80)
+    local hpColor = getHealthColor(healthPct)
     local thickness = math.clamp(State.HealthBarThickness or 4, 1, 12)
+    local backThickness = thickness + 4
+    local glowThickness = thickness + 8
+
+    local function setCap(circle, pos, radius, color, transparency)
+        circle.Position = pos
+        circle.Radius = radius
+        circle.Color = color
+        circle.Filled = true
+        if transparency then circle.Transparency = transparency end
+        circle.Visible = true
+    end
 
     if State.HealthBarSide == "Left" or State.HealthBarSide == "Right" then
         local bx = State.HealthBarSide == "Left" and (x - (thickness + 6)) or (x + w + 6)
@@ -1036,23 +1192,30 @@ local function drawHealth(rec, x, y, w, h, healthPct)
 
         rec.HealthBackLine.From = from
         rec.HealthBackLine.To = to
-        rec.HealthBackLine.Color = Color3.fromRGB(16, 16, 18)
-        rec.HealthBackLine.Thickness = thickness + 3
+        rec.HealthBackLine.Color = Color3.fromRGB(18, 18, 22)
+        rec.HealthBackLine.Thickness = backThickness
         rec.HealthBackLine.Visible = true
-
-        if State.ESPGlow then
-            rec.HealthGlowLine.From = from
-            rec.HealthGlowLine.To = fillTo
-            rec.HealthGlowLine.Color = hpColor
-            rec.HealthGlowLine.Thickness = thickness + 5
-            rec.HealthGlowLine.Visible = true
-        end
 
         rec.HealthLine.From = from
         rec.HealthLine.To = fillTo
         rec.HealthLine.Color = hpColor
         rec.HealthLine.Thickness = thickness
         rec.HealthLine.Visible = true
+
+        setCap(rec.HealthBackCaps[1], from, backThickness * 0.5, Color3.fromRGB(18, 18, 22))
+        setCap(rec.HealthBackCaps[2], to, backThickness * 0.5, Color3.fromRGB(18, 18, 22))
+        setCap(rec.HealthFillCaps[1], from, thickness * 0.5, hpColor)
+        setCap(rec.HealthFillCaps[2], fillTo, thickness * 0.5, hpColor)
+
+        if State.ESPGlow then
+            rec.HealthGlowLine.From = from
+            rec.HealthGlowLine.To = fillTo
+            rec.HealthGlowLine.Color = hpColor
+            rec.HealthGlowLine.Thickness = glowThickness
+            rec.HealthGlowLine.Visible = true
+            setCap(rec.HealthGlowCaps[1], from, glowThickness * 0.5, hpColor, 0.12)
+            setCap(rec.HealthGlowCaps[2], fillTo, glowThickness * 0.5, hpColor, 0.12)
+        end
     else
         local by = State.HealthBarSide == "Top" and (y - (thickness + 6)) or (y + h + 6)
         local from = Vector2.new(x, by)
@@ -1061,23 +1224,30 @@ local function drawHealth(rec, x, y, w, h, healthPct)
 
         rec.HealthBackLine.From = from
         rec.HealthBackLine.To = to
-        rec.HealthBackLine.Color = Color3.fromRGB(16, 16, 18)
-        rec.HealthBackLine.Thickness = thickness + 3
+        rec.HealthBackLine.Color = Color3.fromRGB(18, 18, 22)
+        rec.HealthBackLine.Thickness = backThickness
         rec.HealthBackLine.Visible = true
-
-        if State.ESPGlow then
-            rec.HealthGlowLine.From = from
-            rec.HealthGlowLine.To = fillTo
-            rec.HealthGlowLine.Color = hpColor
-            rec.HealthGlowLine.Thickness = thickness + 5
-            rec.HealthGlowLine.Visible = true
-        end
 
         rec.HealthLine.From = from
         rec.HealthLine.To = fillTo
         rec.HealthLine.Color = hpColor
         rec.HealthLine.Thickness = thickness
         rec.HealthLine.Visible = true
+
+        setCap(rec.HealthBackCaps[1], from, backThickness * 0.5, Color3.fromRGB(18, 18, 22))
+        setCap(rec.HealthBackCaps[2], to, backThickness * 0.5, Color3.fromRGB(18, 18, 22))
+        setCap(rec.HealthFillCaps[1], from, thickness * 0.5, hpColor)
+        setCap(rec.HealthFillCaps[2], fillTo, thickness * 0.5, hpColor)
+
+        if State.ESPGlow then
+            rec.HealthGlowLine.From = from
+            rec.HealthGlowLine.To = fillTo
+            rec.HealthGlowLine.Color = hpColor
+            rec.HealthGlowLine.Thickness = glowThickness
+            rec.HealthGlowLine.Visible = true
+            setCap(rec.HealthGlowCaps[1], from, glowThickness * 0.5, hpColor, 0.12)
+            setCap(rec.HealthGlowCaps[2], fillTo, glowThickness * 0.5, hpColor, 0.12)
+        end
     end
 end
 
@@ -1150,6 +1320,12 @@ local function updateESP()
 
                     drawHealth(rec, x, y, w, h, hum.Health / math.max(hum.MaxHealth, 1))
                     drawSkeleton(rec, target, c, h)
+                    local nameText = target.Name
+                    local owner = Players:GetPlayerFromCharacter(target)
+                    if owner then
+                        nameText = owner.DisplayName
+                    end
+                    drawName(rec, nameText, x, y, w, c)
                 end
             end
         end
@@ -1173,8 +1349,8 @@ local function updateFOV()
 end
 
 local function clearPreview()
-    if App.PreviewWorld then App.PreviewWorld:Destroy() App.PreviewWorld = nil end
-    if App.PreviewClone then App.PreviewClone:Destroy() App.PreviewClone = nil end
+    if App.PreviewWorld then App.PreviewWorld:Destroy(); App.PreviewWorld = nil end
+    if App.PreviewClone then App.PreviewClone:Destroy(); App.PreviewClone = nil end
 end
 
 local function rebuildPreview()
@@ -1239,7 +1415,7 @@ local function refreshMenuState()
         App.Content.Visible = true
     end
     if App.Hotkey then
-        App.Hotkey.Text = "Menu: " .. State.MenuKey.Name .. "  |  Aim: " .. State.AimKey.Name .. " [" .. (State.AimActive and "ON" or "OFF") .. "]"
+        App.Hotkey.Text = "Menu: " .. inputToText(State.MenuKey) .. "  |  Aim: " .. inputToText(State.AimKey) .. " [" .. (State.AimActive and "ON" or "OFF") .. "]"
     end
     updateFOV()
 end
@@ -1351,7 +1527,7 @@ local function buildUI()
     App.PageTitle.Parent = App.Content
     registerTheme(App.PageTitle, "TextColor3", "Text")
 
-    App.Hotkey = create("TextLabel", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-16,0,14), Size=UDim2.new(0,260,0,16), Text="Menu: " .. State.MenuKey.Name .. "  |  Aim: " .. State.AimKey.Name .. " [" .. (State.AimActive and "ON" or "OFF") .. "]", Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Right})
+    App.Hotkey = create("TextLabel", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-16,0,14), Size=UDim2.new(0,280,0,16), Text="Menu: " .. inputToText(State.MenuKey) .. "  |  Aim: " .. inputToText(State.AimKey) .. " [" .. (State.AimActive and "ON" or "OFF") .. "]", Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Right})
     App.Hotkey.Parent = App.Content
     registerTheme(App.Hotkey, "TextColor3", "Sub")
 
@@ -1427,6 +1603,10 @@ local function buildPages()
     createDropdown(vis, "Health Position", "Choose left, right, top or bottom", {"Left", "Right", "Top", "Bottom"}, State.HealthBarSide, function(v) State.HealthBarSide = v end)
     createSlider(vis, "Health Thickness", "Adjust the thickness of the health bar", 1, 12, State.HealthBarThickness, 1, function(v) State.HealthBarThickness = v end)
     createToggle(vis, "Skeleton", "Draw a skeleton with a head circle", false, function(v) State.Skeleton = v end)
+    createDropdown(vis, "Skeleton Type", "Choose the current or normal skeleton", {"Current", "Normal"}, State.SkeletonType, function(v) State.SkeletonType = v end)
+    createSlider(vis, "Skeleton Thickness", "Adjust the skeleton thickness", 1, 8, State.SkeletonThickness, 0.1, function(v) State.SkeletonThickness = v end)
+    createToggle(vis, "Names", "Show names above the ESP", false, function(v) State.ESPNames = v end)
+    createSlider(vis, "Text Size", "Adjust the name text size", 10, 28, State.ESPNameSize, 1, function(v) State.ESPNameSize = v end)
     createToggle(vis, "Glow", "Enable glow effect for ESP, skeleton and health", false, function(v) State.ESPGlow = v end)
     createToggle(vis, "Character Window", "Show a right-side window with your character", false, function(v)
         State.CharacterPreview = v
@@ -1440,17 +1620,17 @@ local function buildPages()
         if not v then State.AimActive = false end
         refreshMenuState()
     end)
-    createToggle(cbt, "Show FOV", "Only shows the FOV circle", false, function(v) State.ShowFOV = v updateFOV() end)
-    createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, 150, 1, function(v) State.FOV = v updateFOV() end)
+    createToggle(cbt, "Show FOV", "Only shows the FOV circle", false, function(v) State.ShowFOV = v; updateFOV() end)
+    createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, 150, 1, function(v) State.FOV = v; updateFOV() end)
     createSlider(cbt, "Smooth", "Range from 0 to 10", 0, 10, 0, 0.1, function(v) State.Smooth = v end)
-    createKeybind(cbt, "Aim Key", "Choose the key for toggling the aim on and off", State.AimKey, function(v) State.AimKey = v refreshMenuState() end)
+    createKeybind(cbt, "Aim Key", "Choose the key for toggling the aim on and off", State.AimKey, function(v) State.AimKey = v; refreshMenuState() end)
     createDropdown(cbt, "Aim Part", "Choose head or chest", {"Head", "Chest", "HumanoidRootPart"}, State.AimPart, function(v) State.AimPart = v end)
     createParagraph(cbt, "Aim Status", "Press the aim key once to activate and press it again to deactivate. The FOV stays visible even when the menu is hidden.")
 
     local set = createSection(settings, "Settings", "Menu controls")
-    createKeybind(set, "Menu Hotkey", "Choose the key to hide and show the menu", State.MenuKey, function(v) State.MenuKey = v refreshMenuState() end)
-    createButton(set, "Hide menu", "Same as pressing the hotkey", "Hide", function() State.MenuVisible = not State.MenuVisible refreshMenuState() end)
-    createButton(set, "Minimize", "Collapse and expand the panel", "Min", function() State.Minimized = not State.Minimized refreshMenuState() end)
+    createKeybind(set, "Menu Hotkey", "Choose the key to hide and show the menu", State.MenuKey, function(v) State.MenuKey = v; refreshMenuState() end)
+    createButton(set, "Hide menu", "Same as pressing the hotkey", "Hide", function() State.MenuVisible = not State.MenuVisible; refreshMenuState() end)
+    createButton(set, "Minimize", "Collapse and expand the panel", "Min", function() State.Minimized = not State.Minimized; refreshMenuState() end)
     createButton(set, "Close", "Destroy the whole UI", "Close", function()
         for _, c in ipairs(App.Connections) do safeDisconnect(c) end
         for target in pairs(App.ESP) do removeESPRecord(target) end
@@ -1490,8 +1670,8 @@ local function hookDrag()
 end
 
 local function hookButtons()
-    App.MinBtn.MouseButton1Click:Connect(function() State.Minimized = not State.Minimized refreshMenuState() end)
-    App.HideBtn.MouseButton1Click:Connect(function() State.MenuVisible = not State.MenuVisible refreshMenuState() end)
+    App.MinBtn.MouseButton1Click:Connect(function() State.Minimized = not State.Minimized; refreshMenuState() end)
+    App.HideBtn.MouseButton1Click:Connect(function() State.MenuVisible = not State.MenuVisible; refreshMenuState() end)
     App.CloseBtn.MouseButton1Click:Connect(function()
         for _, c in ipairs(App.Connections) do safeDisconnect(c) end
         for target in pairs(App.ESP) do removeESPRecord(target) end
@@ -1500,11 +1680,11 @@ local function hookButtons()
     end)
 
     table.insert(App.Connections, UserInputService.InputBegan:Connect(function(input, gp)
-        if input.KeyCode == State.MenuKey then
+        if inputMatches(State.MenuKey, input) then
             State.MenuVisible = not State.MenuVisible
             refreshMenuState()
             return
-        elseif input.KeyCode == State.AimKey then
+        elseif inputMatches(State.AimKey, input) then
             if State.CombatEnabled then
                 State.AimActive = not State.AimActive
                 refreshMenuState()
