@@ -39,6 +39,8 @@ local State = {
     MenuVisible = true,
     Minimized = false,
     MenuKey = Enum.KeyCode.RightShift,
+    AimKey = Enum.KeyCode.E,
+    AimHeld = false,
 
     ESPEnabled = false,
     ESPPlayers = true,
@@ -438,6 +440,49 @@ local function createSlider(parent, title, desc, min, max, default, step, cb)
     table.insert(App.Connections, UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
     end))
+    set(default)
+    return {Set=set, Get=function() return state end}
+end
+
+local function createKeybind(parent, title, desc, default, cb)
+    local h = controlHolder(parent, 46)
+    local t = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,7), Size=UDim2.new(1,-120,0,16), Text=title, Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = h
+    registerTheme(t, "TextColor3", "Text")
+    local d = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,23), Size=UDim2.new(1,-120,0,14), Text=desc, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    d.Parent = h
+    registerTheme(d, "TextColor3", "Sub")
+
+    local b = create("TextButton", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,96,0,24), Text=default and default.Name or "None", Font=Enum.Font.GothamBold, TextSize=12, AutoButtonColor=false, BorderSizePixel=0})
+    b.Parent = h
+    registerTheme(b, "BackgroundColor3", "Main")
+    registerTheme(b, "TextColor3", "Text")
+    addCorner(b, 8)
+    addStroke(b)
+
+    local waiting = false
+    local state = default
+
+    local function set(v)
+        state = v
+        b.Text = state and state.Name or "None"
+        if cb then cb(v) end
+    end
+
+    b.MouseButton1Click:Connect(function()
+        waiting = true
+        b.Text = "..."
+    end)
+
+    table.insert(App.Connections, UserInputService.InputBegan:Connect(function(input, gp)
+        if gp or not waiting then return end
+        local code = input.KeyCode
+        if code and code ~= Enum.KeyCode.Unknown then
+            waiting = false
+            set(code)
+        end
+    end))
+
     set(default)
     return {Set=set, Get=function() return state end}
 end
@@ -855,6 +900,9 @@ local function refreshMenuState()
         App.Sidebar.Visible = true
         App.Content.Visible = true
     end
+    if App.Hotkey then
+        App.Hotkey.Text = "Menu: " .. State.MenuKey.Name .. "  |  Aim: " .. State.AimKey.Name
+    end
     updateFOV()
 end
 
@@ -958,7 +1006,7 @@ local function buildUI()
     App.PageTitle.Parent = App.Content
     registerTheme(App.PageTitle, "TextColor3", "Text")
 
-    App.Hotkey = create("TextLabel", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-16,0,14), Size=UDim2.new(0,180,0,16), Text="Toggle: " .. State.MenuKey.Name, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Right})
+    App.Hotkey = create("TextLabel", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-16,0,14), Size=UDim2.new(0,260,0,16), Text="Menu: " .. State.MenuKey.Name .. "  |  Aim: " .. State.AimKey.Name, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Right})
     App.Hotkey.Parent = App.Content
     registerTheme(App.Hotkey, "TextColor3", "Sub")
 
@@ -1036,10 +1084,12 @@ local function buildPages()
     createToggle(cbt, "Show FOV", "Only shows the FOV circle", false, function(v) State.ShowFOV = v updateFOV() end)
     createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, 150, 1, function(v) State.FOV = v updateFOV() end)
     createSlider(cbt, "Smooth", "Range from 0 to 10", 0, 10, 0, 0.1, function(v) State.Smooth = v end)
+    createKeybind(cbt, "Aim Key", "Choose the key for activating the aim", State.AimKey, function(v) State.AimKey = v refreshMenuState() end)
     createDropdown(cbt, "Aim Part", "Choose head or chest", {"Head", "UpperTorso", "HumanoidRootPart"}, State.AimPart, function(v) State.AimPart = v end)
     createParagraph(cbt, "Note", "This tab currently handles the visual FOV and configuration values inside the menu.")
 
     local set = createSection(settings, "Settings", "Menu controls")
+    createKeybind(set, "Menu Hotkey", "Choose the key to hide and show the menu", State.MenuKey, function(v) State.MenuKey = v refreshMenuState() end)
     createButton(set, "Hide menu", "Same as pressing the hotkey", "Hide", function() State.MenuVisible = not State.MenuVisible refreshMenuState() end)
     createButton(set, "Minimize", "Collapse and expand the panel", "Min", function() State.Minimized = not State.Minimized refreshMenuState() end)
     createButton(set, "Close", "Destroy the whole UI", "Close", function()
@@ -1095,6 +1145,8 @@ local function hookButtons()
         if input.KeyCode == State.MenuKey then
             State.MenuVisible = not State.MenuVisible
             refreshMenuState()
+        elseif input.KeyCode == State.AimKey then
+            State.AimHeld = true
         elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
             if App.Popups then
                 local mouse = UserInputService:GetMouseLocation()
@@ -1106,6 +1158,11 @@ local function hookButtons()
                     end
                 end
             end
+        end
+    end))
+    table.insert(App.Connections, UserInputService.InputEnded:Connect(function(input)
+        if input.KeyCode == State.AimKey then
+            State.AimHeld = false
         end
     end))
 end
