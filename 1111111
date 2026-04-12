@@ -90,6 +90,9 @@ local State = {
     AimRequireFOV = true,
     AimDeadzone = 0,
     RetargetDelay = 0.08,
+    AimStickyStrength = 8.5,
+    AimPrediction = 0.00,
+
 
     RenderPriority = "Distance",
     MaxRenderedTargets = 24,
@@ -431,6 +434,8 @@ local function applyLoadedState(data)
     setIf("AimRequireFOV", data.AimRequireFOV ~= false)
     setIf("AimDeadzone", tonumber(data.AimDeadzone) or State.AimDeadzone)
     setIf("RetargetDelay", tonumber(data.RetargetDelay) or State.RetargetDelay)
+    setIf("AimStickyStrength", tonumber(data.AimStickyStrength) or State.AimStickyStrength)
+    setIf("AimPrediction", tonumber(data.AimPrediction) or State.AimPrediction)
     setIf("RenderPriority", data.RenderPriority or State.RenderPriority)
     setIf("MaxRenderedTargets", tonumber(data.MaxRenderedTargets) or State.MaxRenderedTargets)
     setIf("MaxSkeletonTargets", tonumber(data.MaxSkeletonTargets) or State.MaxSkeletonTargets)
@@ -504,6 +509,8 @@ local function saveCurrentConfig(name)
         AimRequireFOV = State.AimRequireFOV,
         AimDeadzone = State.AimDeadzone,
         RetargetDelay = State.RetargetDelay,
+        AimStickyStrength = State.AimStickyStrength,
+        AimPrediction = State.AimPrediction,
         RenderPriority = State.RenderPriority,
         MaxRenderedTargets = State.MaxRenderedTargets,
         MaxSkeletonTargets = State.MaxSkeletonTargets,
@@ -1432,6 +1439,14 @@ local function estimateBoxFromModel(model)
     return x, y, w, h, Vector2.new(headPos.X, headPos.Y), Vector2.new(rootPos.X, rootPos.Y), rootPos.Z
 end
 
+local function isFirstPersonOrControl()
+    local ctrl = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+    local camToFocus = (Camera.CFrame.Position - Camera.Focus.Position).Magnitude
+    local firstPerson = camToFocus <= 1.2
+    return ctrl or firstPerson
+end
+
+
 local function passesWallCheck(model, part)
     if not State.WallCheck then return true end
     if not model or not part then return false end
@@ -1635,12 +1650,14 @@ local function getAimTarget()
         return true
     end
 
-    if State.LockTarget and App.CurrentAimTarget and validPart(App.CurrentAimTarget) then
-        return App.CurrentAimTarget
-    end
-
-    if App.CurrentAimTarget and App.AimTargetChangedAt and (now - App.AimTargetChangedAt) < math.max(0, tonumber(State.RetargetDelay) or 0.08) and validPart(App.CurrentAimTarget) then
-        return App.CurrentAimTarget
+    if App.CurrentAimTarget and validPart(App.CurrentAimTarget) then
+        if State.LockTarget then
+            return App.CurrentAimTarget
+        end
+        local waitRetarget = math.max(0, tonumber(State.RetargetDelay) or 0.08)
+        if App.AimTargetChangedAt and (now - App.AimTargetChangedAt) < waitRetarget then
+            return App.CurrentAimTarget
+        end
     end
 
     local bestPart, bestMetric = nil, math.huge
@@ -1665,6 +1682,9 @@ local function getAimTarget()
                         elseif State.AimPriority == "Visible" then
                             metric = passesWallCheck(model, part) and diff or (diff + 50000)
                         end
+                        if App.CurrentAimTarget and part == App.CurrentAimTarget then
+                            metric = metric * 0.55
+                        end
                         if metric < bestMetric then
                             bestMetric = metric
                             bestPart = part
@@ -1687,7 +1707,14 @@ local function updateAim()
     local targetPart = getAimTarget()
     if not targetPart then return end
 
-    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+    local aimPos = targetPart.Position
+    local prediction = math.clamp(tonumber(State.AimPrediction) or 0, 0, 0.25)
+    if prediction > 0 and targetPart:IsA("BasePart") then
+        local vel = targetPart.AssemblyLinearVelocity
+        aimPos = aimPos + (vel * prediction)
+    end
+
+    local screenPos, onScreen = Camera:WorldToViewportPoint(aimPos)
     if onScreen and screenPos.Z > 0 then
         local center = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
         local diff = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
@@ -1697,13 +1724,15 @@ local function updateAim()
     end
 
     local camPos = Camera.CFrame.Position
-    local desired = CFrame.new(camPos, targetPart.Position)
+    local desired = CFrame.new(camPos, aimPos)
     local smooth = math.clamp(tonumber(State.Smooth) or 0, 0, 10)
+    local sticky = math.clamp(tonumber(State.AimStickyStrength) or 8.5, 0, 10)
 
     if smooth <= 0 then
         Camera.CFrame = desired
     else
-        local alpha = math.clamp(0.8 / (smooth + 1), 0.04, 0.35)
+        local alpha = 1 - (smooth / 12)
+        alpha = math.clamp(alpha + (sticky * 0.045), 0.12, 0.96)
         Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
     end
 end
@@ -1881,7 +1910,8 @@ local function updateESP()
                     live[target] = true
                     local c = State.ESPColor
 
-                    if State.ESPFluid then
+                    local immediateMode = isFirstPersonOrControl()
+                    if State.ESPFluid and not immediateMode then
                         local alpha = math.clamp(tonumber(State.ESPFluidness) or 0.18, 0.08, 0.35)
                         local s = rec.SmoothState
                         if not s then
@@ -1905,12 +1935,27 @@ local function updateESP()
                     local skeletonDistance = State.SkeletonDistance
                     local healthDistance = State.HealthDistance
 
+                    local maxSkeletonBudget = State.MaxSkeletonTargets
+                    local maxTracerBudget = State.MaxTracerTargets
+                    local maxNameBudget = State.MaxNameTargets
+
                     if State.DynamicQuality then
                         local mul = 1
-                        if heavyCount >= 12 then
-                            mul = 0.72
+                        if heavyCount >= 16 then
+                            mul = 0.58
+                            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.45))
+                            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.55))
+                            maxNameBudget = math.max(4, math.floor(maxNameBudget * 0.55))
+                        elseif heavyCount >= 12 then
+                            mul = 0.70
+                            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.55))
+                            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.7))
+                            maxNameBudget = math.max(4, math.floor(maxNameBudget * 0.7))
                         elseif heavyCount >= 8 then
-                            mul = 0.84
+                            mul = 0.82
+                            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.75))
+                            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.82))
+                            maxNameBudget = math.max(5, math.floor(maxNameBudget * 0.82))
                         elseif heavyCount >= 5 then
                             mul = 0.92
                         end
@@ -1921,10 +1966,15 @@ local function updateESP()
                         healthDistance = healthDistance * mul
                     end
 
+                    if immediateMode then
+                        glowDistance = math.max(glowDistance, 220)
+                        nameDistance = math.max(nameDistance, 260)
+                    end
+
                     local glowEnabled = State.ESPGlow and dist <= glowDistance
-                    local showTracer = State.Tracers and rank <= State.MaxTracerTargets and dist <= tracerDistance
-                    local showSkeleton = State.Skeleton and rank <= State.MaxSkeletonTargets and dist <= skeletonDistance
-                    local showNames = State.ESPNames and rank <= State.MaxNameTargets and dist <= nameDistance
+                    local showTracer = State.Tracers and rank <= maxTracerBudget and dist <= tracerDistance
+                    local showSkeleton = State.Skeleton and rank <= maxSkeletonBudget and dist <= skeletonDistance
+                    local showNames = State.ESPNames and rank <= maxNameBudget and dist <= nameDistance
                     local showHealth = State.HealthBar and dist <= healthDistance
 
                     rec.BoxGlow.Visible = false
@@ -2497,8 +2547,14 @@ end))
 bindControl("RetargetDelay", createSlider(cbt, "Retarget Delay", "How long before jumping to a new target", 0, 0.5, State.RetargetDelay, 0.01, function(v)
     State.RetargetDelay = v
 end))
+bindControl("AimStickyStrength", createSlider(cbt, "Sticky Strength", "Más alto = se pega más duro al target", 0, 10, State.AimStickyStrength, 0.1, function(v)
+    State.AimStickyStrength = v
+end))
+bindControl("AimPrediction", createSlider(cbt, "Prediction", "Pequeña predicción para targets en movimiento", 0, 0.20, State.AimPrediction, 0.01, function(v)
+    State.AimPrediction = v
+end))
 bindControl("WallCheck", createToggle(cbt, "Wall Check", "No pegar a través de paredes", false, function(v) State.WallCheck = v end))
-createParagraph(cbt, "Aim Status", "Si casi no marca targets, usa Priority en Distance o Visible, sube Aim Distance y activa Players/NPCs en Visual.")
+createParagraph(cbt, "Aim Status", "Para que se pegue más: Smooth bajo, Sticky alto, Lock Target ON y Priority en Crosshair o Distance.")
 
     local perfLobby = createSection(perf, "Lobby", "Todos los jugadores del lobby ordenados por fila con su logo de Roblox")
     createButton(perfLobby, "Return Camera", "Vuelve la cámara a tu personaje", "Self", function()
@@ -2703,8 +2759,15 @@ local function startLoop()
             end
         end
 
+        local immediateMode = isFirstPersonOrControl()
         if State.ESPEnabled then
-            updateESP()
+            if immediateMode then
+                updateESP()
+                espTick = 0
+            elseif espTick >= espInterval then
+                espTick = 0
+                updateESP()
+            end
         else
             for target, rec in pairs(App.ESP) do
                 hideRecord(rec)
