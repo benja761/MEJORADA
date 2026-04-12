@@ -70,7 +70,7 @@ local State = {
     ESPFluid = false,
     ESPFluidness = 0.18,
     DynamicQuality = true,
-    OnlyScreenTargets = true,
+    OnlyScreenTargets = false,
     NameDistance = 260,
     GlowDistance = 260,
     TracerDistance = 380,
@@ -84,19 +84,19 @@ local State = {
     AimPart = "Head",
     WallCheck = false,
     AimMode = "Toggle",
-    AimPriority = "Crosshair",
-    AimDistance = 650,
+    AimPriority = "Distance",
+    AimDistance = 900,
     LockTarget = false,
     AimRequireFOV = true,
-    AimDeadzone = 2,
-    RetargetDelay = 0.12,
+    AimDeadzone = 0,
+    RetargetDelay = 0.08,
 
-    RenderPriority = "Crosshair",
-    MaxRenderedTargets = 12,
-    MaxSkeletonTargets = 5,
-    MaxTracerTargets = 8,
-    MaxNameTargets = 12,
-    TargetRefreshRate = 0.08,
+    RenderPriority = "Distance",
+    MaxRenderedTargets = 24,
+    MaxSkeletonTargets = 6,
+    MaxTracerTargets = 10,
+    MaxNameTargets = 16,
+    TargetRefreshRate = 0.06,
 
     ConfigName = "default",
     SelectedConfig = "default",
@@ -263,7 +263,7 @@ local function applyVisualPreset(mode)
         setControlValue("ESPFluidness", 0.18)
         setControlValue("DynamicQuality", true)
         setControlValue("OnlyScreenTargets", true)
-        setControlValue("MaxRenderedTargets", 7)
+        setControlValue("MaxRenderedTargets", 10)
         setControlValue("MaxSkeletonTargets", 2)
         setControlValue("MaxTracerTargets", 4)
         setControlValue("MaxNameTargets", 5)
@@ -277,8 +277,8 @@ local function applyVisualPreset(mode)
         setControlValue("ESPFluid", false)
         setControlValue("ESPFluidness", 0.18)
         setControlValue("DynamicQuality", false)
-        setControlValue("OnlyScreenTargets", true)
-        setControlValue("MaxRenderedTargets", 14)
+        setControlValue("OnlyScreenTargets", false)
+        setControlValue("MaxRenderedTargets", 18)
         setControlValue("MaxSkeletonTargets", 6)
         setControlValue("MaxTracerTargets", 9)
         setControlValue("MaxNameTargets", 10)
@@ -292,8 +292,8 @@ local function applyVisualPreset(mode)
         setControlValue("ESPFluid", false)
         setControlValue("ESPFluidness", 0.18)
         setControlValue("DynamicQuality", true)
-        setControlValue("OnlyScreenTargets", true)
-        setControlValue("MaxRenderedTargets", 10)
+        setControlValue("OnlyScreenTargets", false)
+        setControlValue("MaxRenderedTargets", 14)
         setControlValue("MaxSkeletonTargets", 4)
         setControlValue("MaxTracerTargets", 6)
         setControlValue("MaxNameTargets", 7)
@@ -553,7 +553,12 @@ end
 local function getRoot(model)
     if not model then return nil end
     if model:IsA("Model") then
-        return model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or model:FindFirstChild("Head")
+        return model:FindFirstChild("HumanoidRootPart")
+            or model.PrimaryPart
+            or model:FindFirstChild("Head")
+            or model:FindFirstChild("UpperTorso")
+            or model:FindFirstChild("Torso")
+            or model:FindFirstChildWhichIsA("BasePart")
     elseif model:IsA("BasePart") then
         return model
     end
@@ -1337,16 +1342,17 @@ local function hideRecord(rec)
 end
 
 local function collectTargets()
-    local out = {}
+    local out, seen = {}, {}
+
     if State.ESPPlayers then
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer and plr.Character and isAliveModel(plr.Character) then
-                table.insert(out, plr.Character)
+                seen[plr.Character] = true
             end
         end
     end
+
     if State.ESPNPCs then
-        local seen = {}
         for _, tag in ipairs({"NPC","Enemy","Mob","Bot","DebugNPC"}) do
             for _, m in ipairs(CollectionService:GetTagged(tag)) do
                 if m:IsA("Model") and isAliveModel(m) then
@@ -1354,17 +1360,33 @@ local function collectTargets()
                 end
             end
         end
+
         for _, folderName in ipairs({"NPCs","Enemies","Mobs","Bots"}) do
             local folder = Workspace:FindFirstChild(folderName)
             if folder then
-                for _, child in ipairs(folder:GetChildren()) do
+                for _, child in ipairs(folder:GetDescendants()) do
                     if child:IsA("Model") and isAliveModel(child) then
                         seen[child] = true
                     end
                 end
             end
         end
-        for model in pairs(seen) do table.insert(out, model) end
+
+        for _, inst in ipairs(Workspace:GetDescendants()) do
+            if inst:IsA("Model") and not seen[inst] then
+                local hum = getHumanoid(inst)
+                if hum and hum.Health > 0 then
+                    local owner = Players:GetPlayerFromCharacter(inst)
+                    if not owner then
+                        seen[inst] = true
+                    end
+                end
+            end
+        end
+    end
+
+    for model in pairs(seen) do
+        table.insert(out, model)
     end
     return out
 end
@@ -1428,17 +1450,22 @@ local function getPriorityScore(model)
     local root = getRoot(model)
     local part = getTargetPart(model) or root
     if not root or not part then return math.huge end
+
     local dist = distanceTo(root.Position)
     local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
     local crosshair = math.huge
     if onScreen and screenPos.Z > 0 then
         crosshair = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)).Magnitude
     end
-    if State.RenderPriority == "Distance" then
+
+    local mode = State.AimPriority or State.RenderPriority
+    if mode == "Distance" then
         return dist
-    elseif State.RenderPriority == "Health" then
+    elseif mode == "Health" then
         local hum = getHumanoid(model)
         return hum and hum.Health or math.huge
+    elseif mode == "Visible" then
+        return passesWallCheck(model, part) and crosshair or (crosshair + 50000)
     end
     return crosshair
 end
@@ -1456,11 +1483,11 @@ local function refreshTargetCache()
     for _, model in ipairs(collectTargets()) do
         local root = getRoot(model)
         local hum = getHumanoid(model)
-        if root and hum and hum.Health > 0 then
+        local aimPart = getTargetPart(model) or root
+        if root and hum and hum.Health > 0 and aimPart then
             local dist = distanceTo(root.Position)
-            if dist <= (maxDistance + 40) then
+            if dist <= (maxDistance + 150) then
                 if State.OnlyScreenTargets then
-                    local aimPart = getTargetPart(model) or root
                     local pos, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
                     if onScreen and pos.Z > 0 then
                         table.insert(pool, {Model = model, Score = getPriorityScore(model), Distance = dist})
@@ -1471,7 +1498,14 @@ local function refreshTargetCache()
             end
         end
     end
-    table.sort(pool, function(a, b) return a.Score < b.Score end)
+
+    table.sort(pool, function(a, b)
+        if a.Score == b.Score then
+            return a.Distance < b.Distance
+        end
+        return a.Score < b.Score
+    end)
+
     for i = 1, math.min(#pool, math.max(1, State.MaxRenderedTargets)) do
         App.TargetCache[i] = pool[i].Model
     end
@@ -1583,7 +1617,7 @@ local function getAimTarget()
 
     local center = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
     local radius = math.max(0, tonumber(State.FOV) or 0)
-    local maxDist = math.max(50, tonumber(State.AimDistance) or 650)
+    local maxDist = math.max(50, tonumber(State.AimDistance) or 900)
     local now = tick()
 
     local function validPart(part)
@@ -1605,7 +1639,7 @@ local function getAimTarget()
         return App.CurrentAimTarget
     end
 
-    if App.CurrentAimTarget and App.AimTargetChangedAt and (now - App.AimTargetChangedAt) < math.max(0, tonumber(State.RetargetDelay) or 0) and validPart(App.CurrentAimTarget) then
+    if App.CurrentAimTarget and App.AimTargetChangedAt and (now - App.AimTargetChangedAt) < math.max(0, tonumber(State.RetargetDelay) or 0.08) and validPart(App.CurrentAimTarget) then
         return App.CurrentAimTarget
     end
 
@@ -1618,7 +1652,7 @@ local function getAimTarget()
         local part = getTargetPart(model)
         if hum and hum.Health > 0 and root and part then
             local dist = distanceTo(root.Position)
-            if dist <= maxDist and passesWallCheck(model, part) then
+            if dist <= maxDist and (not State.WallCheck or passesWallCheck(model, part)) then
                 local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
                 if onScreen and screenPos.Z > 0 then
                     local diff = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
@@ -1628,6 +1662,8 @@ local function getAimTarget()
                             metric = dist
                         elseif State.AimPriority == "Health" then
                             metric = hum.Health
+                        elseif State.AimPriority == "Visible" then
+                            metric = passesWallCheck(model, part) and diff or (diff + 50000)
                         end
                         if metric < bestMetric then
                             bestMetric = metric
@@ -2363,7 +2399,7 @@ local function buildPages()
     createParagraph(visFlow, "Mejorado", "Las ESP ya no retrasan su posición al girar la cámara. Ahora el seguimiento es instantáneo y el suavizado solo toca el tamaño si tú lo activas.")
 
     local perfMain = createSection(visual, "Render / Limits", "Toda la configuración de ESP quedó aquí para que no tengas que ir a Perf")
-    bindControl("RenderPriority", createDropdown(perfMain, "Priority", "Orden para render y selección de aim", {"Crosshair", "Distance", "Health"}, State.RenderPriority, function(v) State.RenderPriority = v end))
+    bindControl("RenderPriority", createDropdown(perfMain, "Priority", "Orden para render y selección de aim", {"Crosshair", "Distance", "Health", "Visible"}, State.RenderPriority, function(v) State.RenderPriority = v end))
     bindControl("MaxRenderedTargets", createSlider(perfMain, "Max ESP Targets", "Cuántos objetivos completos se renderizan", 2, 30, State.MaxRenderedTargets, 1, function(v) State.MaxRenderedTargets = v end))
     bindControl("MaxSkeletonTargets", createSlider(perfMain, "Max Skeleton Targets", "Skeleton solo para los más importantes", 0, 15, State.MaxSkeletonTargets, 1, function(v) State.MaxSkeletonTargets = v end))
     bindControl("MaxTracerTargets", createSlider(perfMain, "Max Tracer Targets", "Líneas solo para los primeros", 0, 20, State.MaxTracerTargets, 1, function(v) State.MaxTracerTargets = v end))
@@ -2427,42 +2463,42 @@ local function buildPages()
 
 
 
-    local cbt = createSection(combat, "Combat / Aim", "All options start disabled")
-    bindControl("CombatEnabled", createToggle(cbt, "Enable Combat Page", "Master toggle for this tab", false, function(v)
-        State.CombatEnabled = v
-        if not v then State.AimActive = false end
+    local cbt = createSection(combat, "Combat / Aim", "Opciones más útiles y mejores defaults")
+bindControl("CombatEnabled", createToggle(cbt, "Enable Combat", "Master toggle for this tab", false, function(v)
+    State.CombatEnabled = v
+    if not v then State.AimActive = false end
+    refreshMenuState()
+end))
+bindControl("ShowFOV", createToggle(cbt, "Show FOV", "Show the FOV circle", false, function(v) State.ShowFOV = v; updateFOV() end))
+bindControl("FOV", createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, State.FOV, 1, function(v) State.FOV = v; updateFOV() end))
+bindControl("Smooth", createSlider(cbt, "Smooth", "Range from 0 to 10", 0, 10, State.Smooth, 0.1, function(v) State.Smooth = v end))
+bindControl("AimKey", createKeybind(cbt, "Aim Key", "Keyboard or mouse button", State.AimKey, function(v) State.AimKey = v; refreshMenuState() end))
+bindControl("AimMode", createDropdown(cbt, "Aim Mode", "Toggle or hold with the same key", {"Toggle", "Hold"}, State.AimMode, function(v)
+    State.AimMode = v
+    if v ~= "Toggle" then
+        State.AimActive = false
+        App.CurrentAimTarget = nil
         refreshMenuState()
-    end))
-    bindControl("ShowFOV", createToggle(cbt, "Show FOV", "Only shows the FOV circle", false, function(v) State.ShowFOV = v; updateFOV() end))
-    bindControl("FOV", createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, 150, 1, function(v) State.FOV = v; updateFOV() end))
-    bindControl("Smooth", createSlider(cbt, "Smooth", "Range from 0 to 10", 0, 10, 0, 0.1, function(v) State.Smooth = v end))
-    bindControl("AimKey", createKeybind(cbt, "Aim Key", "Choose the key for the aim", State.AimKey, function(v) State.AimKey = v; refreshMenuState() end))
-    bindControl("AimMode", createDropdown(cbt, "Aim Mode", "Toggle or hold with the same key", {"Toggle", "Hold"}, State.AimMode, function(v)
-        State.AimMode = v
-        if v ~= "Toggle" then
-            State.AimActive = false
-            App.CurrentAimTarget = nil
-            refreshMenuState()
-        end
-    end))
-    bindControl("AimPart", createDropdown(cbt, "Aim Part", "Choose head or chest", {"Head", "Chest", "HumanoidRootPart"}, State.AimPart, function(v) State.AimPart = v end))
-    bindControl("AimPriority", createDropdown(cbt, "Aim Priority", "How the aim chooses the best target", {"Crosshair", "Distance", "Health"}, State.AimPriority, function(v) State.AimPriority = v end))
-    bindControl("AimDistance", createSlider(cbt, "Aim Distance", "Maximum distance for lock", 50, 2000, State.AimDistance, 10, function(v) State.AimDistance = v end))
-    bindControl("LockTarget", createToggle(cbt, "Lock Target", "Keep the same target while it stays valid", false, function(v)
-        State.LockTarget = v
-        if not v then App.CurrentAimTarget = nil end
-    end))
-    bindControl("AimRequireFOV", createToggle(cbt, "Require FOV", "Solo toma targets dentro del círculo", State.AimRequireFOV, function(v)
-        State.AimRequireFOV = v
-    end))
-    bindControl("AimDeadzone", createSlider(cbt, "Deadzone", "Evita micro temblores cuando ya está casi en el target", 0, 25, State.AimDeadzone, 0.5, function(v)
-        State.AimDeadzone = v
-    end))
-    bindControl("RetargetDelay", createSlider(cbt, "Retarget Delay", "Cuánto espera antes de saltar a otro target", 0, 0.5, State.RetargetDelay, 0.01, function(v)
-        State.RetargetDelay = v
-    end))
-    bindControl("WallCheck", createToggle(cbt, "Wall Check", "No pegar a través de paredes", false, function(v) State.WallCheck = v end))
-    createParagraph(cbt, "Aim Status", "Toggle mode stays on until you press the key again. Hold mode only aims while the key is pressed. The FOV stays visible even when the menu is hidden.")
+    end
+end))
+bindControl("AimPart", createDropdown(cbt, "Aim Part", "Choose head, chest or root", {"Head", "Chest", "HumanoidRootPart"}, State.AimPart, function(v) State.AimPart = v end))
+bindControl("AimPriority", createDropdown(cbt, "Aim Priority", "How the aim chooses the best target", {"Crosshair", "Distance", "Health", "Visible"}, State.AimPriority, function(v) State.AimPriority = v end))
+bindControl("AimDistance", createSlider(cbt, "Aim Distance", "Maximum world distance for lock", 50, 2000, State.AimDistance, 10, function(v) State.AimDistance = v end))
+bindControl("LockTarget", createToggle(cbt, "Lock Target", "Keep the same target while it stays valid", State.LockTarget, function(v)
+    State.LockTarget = v
+    if not v then App.CurrentAimTarget = nil end
+end))
+bindControl("AimRequireFOV", createToggle(cbt, "Require FOV", "Only use targets inside the circle", State.AimRequireFOV, function(v)
+    State.AimRequireFOV = v
+end))
+bindControl("AimDeadzone", createSlider(cbt, "Deadzone", "Ignore tiny center movements", 0, 40, State.AimDeadzone, 1, function(v)
+    State.AimDeadzone = v
+end))
+bindControl("RetargetDelay", createSlider(cbt, "Retarget Delay", "How long before jumping to a new target", 0, 0.5, State.RetargetDelay, 0.01, function(v)
+    State.RetargetDelay = v
+end))
+bindControl("WallCheck", createToggle(cbt, "Wall Check", "No pegar a través de paredes", false, function(v) State.WallCheck = v end))
+createParagraph(cbt, "Aim Status", "Si casi no marca targets, usa Priority en Distance o Visible, sube Aim Distance y activa Players/NPCs en Visual.")
 
     local perfLobby = createSection(perf, "Lobby", "Todos los jugadores del lobby ordenados por fila con su logo de Roblox")
     createButton(perfLobby, "Return Camera", "Vuelve la cámara a tu personaje", "Self", function()
