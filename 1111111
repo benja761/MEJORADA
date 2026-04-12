@@ -40,11 +40,11 @@ local State = {
     Minimized = false,
     MenuKey = Enum.KeyCode.RightShift,
     AimKey = Enum.KeyCode.E,
-    AimHeld = false,
+    AimActive = false,
 
     ESPEnabled = false,
-    ESPPlayers = true,
-    ESPNPCs = true,
+    ESPPlayers = false,
+    ESPNPCs = false,
     ESPDistance = 500,
     ESPColor = Color3.fromRGB(255, 255, 255),
     ESPStyle = "Corner",
@@ -52,6 +52,9 @@ local State = {
     TracerOrigin = "Bottom",
     HealthBar = false,
     HealthBarSide = "Left",
+    HealthBarThickness = 4,
+    Skeleton = false,
+    ESPGlow = false,
     CharacterPreview = false,
 
     CombatEnabled = false,
@@ -203,20 +206,21 @@ local function createGlowText(parent, text, pos, size, textSize, font, z)
     })
     holder.Parent = parent
 
-    local layers = {}
-    for radius = 4, 1, -1 do
-        for ox = -radius, radius do
-            for oy = -radius, radius do
-                if not (ox == 0 and oy == 0) then
-                    table.insert(layers, {Vector2.new(ox, oy), 0.93 - (radius * 0.1)})
-                end
-            end
-        end
-    end
-    table.insert(layers, 1, {Vector2.new(0, 0), 0})
+    local layers = {
+        {Vector2.new(0, 0), 0, App.Theme.Text},
+        {Vector2.new(0, 0), 0.18, App.Theme.Accent},
+        {Vector2.new(1, 0), 0.78, App.Theme.Accent},
+        {Vector2.new(-1, 0), 0.78, App.Theme.Accent},
+        {Vector2.new(0, 1), 0.78, App.Theme.Accent},
+        {Vector2.new(0, -1), 0.78, App.Theme.Accent},
+        {Vector2.new(2, 0), 0.9, App.Theme.Accent},
+        {Vector2.new(-2, 0), 0.9, App.Theme.Accent},
+        {Vector2.new(0, 2), 0.9, App.Theme.Accent},
+        {Vector2.new(0, -2), 0.9, App.Theme.Accent}
+    }
 
-    for i, entry in ipairs(layers) do
-        local off, trans = entry[1], entry[2]
+    for _, entry in ipairs(layers) do
+        local off, trans, color = entry[1], entry[2], entry[3]
         local glow = create("TextLabel", {
             BackgroundTransparency = 1,
             Position = UDim2.new(0, off.X, 0, off.Y),
@@ -225,7 +229,7 @@ local function createGlowText(parent, text, pos, size, textSize, font, z)
             Font = font,
             TextSize = textSize,
             TextTransparency = trans,
-            TextColor3 = i == 1 and App.Theme.Text or App.Theme.Accent,
+            TextColor3 = color,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Center,
             ZIndex = z or 5
@@ -642,22 +646,22 @@ local function createESPRecord(target)
     local lineGlow = Drawing.new("Line")
     lineGlow.Visible = false
     lineGlow.Thickness = 4
-    lineGlow.Transparency = 0.18
+    lineGlow.Transparency = 0.16
 
     local line = Drawing.new("Line")
     line.Visible = false
-    line.Thickness = 1.6
+    line.Thickness = 1.7
 
     local boxGlow = Drawing.new("Square")
     boxGlow.Visible = false
     boxGlow.Filled = false
     boxGlow.Thickness = 4
-    boxGlow.Transparency = 0.18
+    boxGlow.Transparency = 0.16
 
     local box = Drawing.new("Square")
     box.Visible = false
     box.Filled = false
-    box.Thickness = 1.4
+    box.Thickness = 1.5
 
     local cornerGlow = {}
     local corners = {}
@@ -665,36 +669,67 @@ local function createESPRecord(target)
         local lg = Drawing.new("Line")
         lg.Visible = false
         lg.Thickness = 4
-        lg.Transparency = 0.18
+        lg.Transparency = 0.16
         cornerGlow[i] = lg
 
         local l = Drawing.new("Line")
         l.Visible = false
-        l.Thickness = 1.4
+        l.Thickness = 1.5
         corners[i] = l
     end
 
-    local healthGlowOutline = Drawing.new("Square")
-    healthGlowOutline.Visible = false
-    healthGlowOutline.Filled = false
-    healthGlowOutline.Thickness = 4
-    healthGlowOutline.Transparency = 0.18
+    local cornerRoundGlow = {}
+    local cornerRound = {}
+    for i = 1, 4 do
+        local cg = Drawing.new("Circle")
+        cg.Visible = false
+        cg.Filled = false
+        cg.Thickness = 4
+        cg.Transparency = 0.16
+        cornerRoundGlow[i] = cg
 
-    local healthOutline = Drawing.new("Square")
-    healthOutline.Visible = false
-    healthOutline.Filled = false
-    healthOutline.Thickness = 1
+        local c = Drawing.new("Circle")
+        c.Visible = false
+        c.Filled = false
+        c.Thickness = 1.4
+        cornerRound[i] = c
+    end
 
-    local healthGlowFill = Drawing.new("Square")
-    healthGlowFill.Visible = false
-    healthGlowFill.Filled = true
-    healthGlowFill.Thickness = 1
-    healthGlowFill.Transparency = 0.15
+    local healthGlowLine = Drawing.new("Line")
+    healthGlowLine.Visible = false
+    healthGlowLine.Transparency = 0.16
 
-    local healthFill = Drawing.new("Square")
-    healthFill.Visible = false
-    healthFill.Filled = true
-    healthFill.Thickness = 1
+    local healthBackLine = Drawing.new("Line")
+    healthBackLine.Visible = false
+
+    local healthLine = Drawing.new("Line")
+    healthLine.Visible = false
+
+    local skeletonGlow = {}
+    local skeleton = {}
+    for i = 1, 12 do
+        local lg = Drawing.new("Line")
+        lg.Visible = false
+        lg.Thickness = 4
+        lg.Transparency = 0.16
+        skeletonGlow[i] = lg
+
+        local l = Drawing.new("Line")
+        l.Visible = false
+        l.Thickness = 1.6
+        skeleton[i] = l
+    end
+
+    local headGlow = Drawing.new("Circle")
+    headGlow.Visible = false
+    headGlow.Filled = false
+    headGlow.Thickness = 4
+    headGlow.Transparency = 0.16
+
+    local headCircle = Drawing.new("Circle")
+    headCircle.Visible = false
+    headCircle.Filled = false
+    headCircle.Thickness = 1.5
 
     App.ESP[target] = {
         Target = target,
@@ -705,10 +740,15 @@ local function createESPRecord(target)
         Box = box,
         CornerGlow = cornerGlow,
         Corners = corners,
-        HealthGlowOutline = healthGlowOutline,
-        HealthOutline = healthOutline,
-        HealthGlowFill = healthGlowFill,
-        HealthFill = healthFill,
+        CornerRoundGlow = cornerRoundGlow,
+        CornerRound = cornerRound,
+        HealthGlowLine = healthGlowLine,
+        HealthBackLine = healthBackLine,
+        HealthLine = healthLine,
+        SkeletonGlow = skeletonGlow,
+        Skeleton = skeleton,
+        HeadGlow = headGlow,
+        HeadCircle = headCircle,
     }
     return App.ESP[target]
 end
@@ -720,12 +760,17 @@ local function removeESPRecord(target)
     pcall(function() rec.Line:Remove() end)
     pcall(function() rec.BoxGlow:Remove() end)
     pcall(function() rec.Box:Remove() end)
-    pcall(function() rec.HealthGlowOutline:Remove() end)
-    pcall(function() rec.HealthOutline:Remove() end)
-    pcall(function() rec.HealthGlowFill:Remove() end)
-    pcall(function() rec.HealthFill:Remove() end)
+    pcall(function() rec.HealthGlowLine:Remove() end)
+    pcall(function() rec.HealthBackLine:Remove() end)
+    pcall(function() rec.HealthLine:Remove() end)
+    pcall(function() rec.HeadGlow:Remove() end)
+    pcall(function() rec.HeadCircle:Remove() end)
     for _, l in ipairs(rec.CornerGlow) do pcall(function() l:Remove() end) end
     for _, l in ipairs(rec.Corners) do pcall(function() l:Remove() end) end
+    for _, c in ipairs(rec.CornerRoundGlow) do pcall(function() c:Remove() end) end
+    for _, c in ipairs(rec.CornerRound) do pcall(function() c:Remove() end) end
+    for _, l in ipairs(rec.SkeletonGlow) do pcall(function() l:Remove() end) end
+    for _, l in ipairs(rec.Skeleton) do pcall(function() l:Remove() end) end
     if rec.Folder then pcall(function() rec.Folder:Destroy() end) end
     App.ESP[target] = nil
 end
@@ -735,12 +780,17 @@ local function hideRecord(rec)
     rec.Line.Visible = false
     rec.BoxGlow.Visible = false
     rec.Box.Visible = false
-    rec.HealthGlowOutline.Visible = false
-    rec.HealthOutline.Visible = false
-    rec.HealthGlowFill.Visible = false
-    rec.HealthFill.Visible = false
+    rec.HealthGlowLine.Visible = false
+    rec.HealthBackLine.Visible = false
+    rec.HealthLine.Visible = false
+    rec.HeadGlow.Visible = false
+    rec.HeadCircle.Visible = false
     for _, l in ipairs(rec.CornerGlow) do l.Visible = false end
     for _, l in ipairs(rec.Corners) do l.Visible = false end
+    for _, c in ipairs(rec.CornerRoundGlow) do c.Visible = false end
+    for _, c in ipairs(rec.CornerRound) do c.Visible = false end
+    for _, l in ipairs(rec.SkeletonGlow) do l.Visible = false end
+    for _, l in ipairs(rec.Skeleton) do l.Visible = false end
 end
 
 local function collectTargets()
@@ -777,6 +827,108 @@ local function collectTargets()
 end
 
 
+
+local function getPartByNames(model, names)
+    for _, name in ipairs(names) do
+        local part = model:FindFirstChild(name)
+        if part and part:IsA("BasePart") then
+            return part
+        end
+    end
+    return nil
+end
+
+local function partToScreen(part)
+    if not part then return nil end
+    local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+    if onScreen and pos.Z > 0 then
+        return Vector2.new(pos.X, pos.Y), pos.Z
+    end
+    return nil
+end
+
+local function drawSkeleton(rec, model, color, boxH)
+    for _, l in ipairs(rec.SkeletonGlow) do l.Visible = false end
+    for _, l in ipairs(rec.Skeleton) do l.Visible = false end
+    rec.HeadGlow.Visible = false
+    rec.HeadCircle.Visible = false
+    if not State.Skeleton then return end
+
+    local head = getPartByNames(model, {"Head"})
+    local upper = getPartByNames(model, {"UpperTorso", "Torso"})
+    local lower = getPartByNames(model, {"LowerTorso", "HumanoidRootPart", "Torso"})
+    local lua = getPartByNames(model, {"LeftUpperArm", "Left Arm"})
+    local lla = getPartByNames(model, {"LeftLowerArm"})
+    local lha = getPartByNames(model, {"LeftHand"})
+    local rua = getPartByNames(model, {"RightUpperArm", "Right Arm"})
+    local rla = getPartByNames(model, {"RightLowerArm"})
+    local rha = getPartByNames(model, {"RightHand"})
+    local lul = getPartByNames(model, {"LeftUpperLeg", "Left Leg"})
+    local lll = getPartByNames(model, {"LeftLowerLeg"})
+    local lfl = getPartByNames(model, {"LeftFoot"})
+    local rul = getPartByNames(model, {"RightUpperLeg", "Right Leg"})
+    local rll = getPartByNames(model, {"RightLowerLeg"})
+    local rfl = getPartByNames(model, {"RightFoot"})
+
+    local segments = {
+        {head, upper},
+        {upper, lower},
+        {upper, lua},
+        {lua, lla},
+        {lla, lha},
+        {upper, rua},
+        {rua, rla},
+        {rla, rha},
+        {lower, lul},
+        {lul, lll},
+        {lll, lfl},
+        {lower, rul},
+        {rul, rll},
+        {rll, rfl},
+    }
+
+    local index = 1
+    for _, seg in ipairs(segments) do
+        if index > #rec.Skeleton then break end
+        local a = seg[1]
+        local b = seg[2]
+        if a and b then
+            local sa = partToScreen(a)
+            local sb = partToScreen(b)
+            if sa and sb then
+                local gl = rec.SkeletonGlow[index]
+                local ln = rec.Skeleton[index]
+                if State.ESPGlow then
+                    gl.From = sa
+                    gl.To = sb
+                    gl.Color = color
+                    gl.Visible = true
+                end
+                ln.From = sa
+                ln.To = sb
+                ln.Color = color
+                ln.Visible = true
+                index += 1
+            end
+        end
+    end
+
+    local headPos = partToScreen(head)
+    if headPos then
+        local radius = math.clamp(boxH * 0.11, 4, 18)
+        if State.ESPGlow then
+            rec.HeadGlow.Position = headPos
+            rec.HeadGlow.Radius = radius
+            rec.HeadGlow.Color = color
+            rec.HeadGlow.Visible = true
+        end
+        rec.HeadCircle.Position = headPos
+        rec.HeadCircle.Radius = radius
+        rec.HeadCircle.Color = color
+        rec.HeadCircle.Visible = true
+    end
+end
+
 local function getAimTarget()
     if not State.CombatEnabled then return nil end
     local center = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
@@ -804,7 +956,7 @@ local function getAimTarget()
 end
 
 local function updateAim()
-    if not State.CombatEnabled or not State.AimHeld then return end
+    if not State.CombatEnabled or not State.AimActive then return end
     local targetPart = getAimTarget()
     if not targetPart then return end
 
@@ -820,83 +972,112 @@ local function updateAim()
     end
 end
 
-local function drawCornerBox(lines, x, y, w, h, color, glowLines)
-    local lenX, lenY = w * 0.25, h * 0.25
+local function drawCornerBox(rec, x, y, w, h, color)
+    local lenX, lenY = w * 0.24, h * 0.24
     local pts = {
         {Vector2.new(x, y), Vector2.new(x + lenX, y)}, {Vector2.new(x, y), Vector2.new(x, y + lenY)},
         {Vector2.new(x+w, y), Vector2.new(x+w - lenX, y)}, {Vector2.new(x+w, y), Vector2.new(x+w, y + lenY)},
         {Vector2.new(x, y+h), Vector2.new(x + lenX, y+h)}, {Vector2.new(x, y+h), Vector2.new(x, y+h - lenY)},
         {Vector2.new(x+w, y+h), Vector2.new(x+w - lenX, y+h)}, {Vector2.new(x+w, y+h), Vector2.new(x+w, y+h - lenY)},
     }
-    for i, l in ipairs(lines) do
+    for i, l in ipairs(rec.Corners) do
         l.From = pts[i][1]
         l.To = pts[i][2]
         l.Color = color
         l.Visible = true
-        local g = glowLines and glowLines[i]
-        if g then
+        local g = rec.CornerGlow[i]
+        g.Visible = false
+        if State.ESPGlow then
             g.From = pts[i][1]
             g.To = pts[i][2]
             g.Color = color
             g.Visible = true
         end
     end
+
+    local radius = math.clamp(math.min(w, h) * 0.055, 2, 7)
+    local cornerPoints = {
+        Vector2.new(x, y),
+        Vector2.new(x + w, y),
+        Vector2.new(x, y + h),
+        Vector2.new(x + w, y + h)
+    }
+    for i, dot in ipairs(rec.CornerRound) do
+        dot.Position = cornerPoints[i]
+        dot.Radius = radius
+        dot.Color = color
+        dot.Visible = true
+
+        local glow = rec.CornerRoundGlow[i]
+        glow.Visible = false
+        if State.ESPGlow then
+            glow.Position = cornerPoints[i]
+            glow.Radius = radius
+            glow.Color = color
+            glow.Visible = true
+        end
+    end
 end
 
 local function drawHealth(rec, x, y, w, h, healthPct)
-    rec.HealthGlowOutline.Visible = false
-    rec.HealthOutline.Visible = false
-    rec.HealthGlowFill.Visible = false
-    rec.HealthFill.Visible = false
+    rec.HealthGlowLine.Visible = false
+    rec.HealthBackLine.Visible = false
+    rec.HealthLine.Visible = false
     if not State.HealthBar then return end
 
-    local hpColor = Color3.fromRGB(255 - math.floor(255*healthPct), math.floor(255*healthPct), 80)
-    local thickness = 3
+    local hpColor = Color3.fromRGB(255 - math.floor(255 * healthPct), math.floor(255 * healthPct), 80)
+    local thickness = math.clamp(State.HealthBarThickness or 4, 1, 12)
 
     if State.HealthBarSide == "Left" or State.HealthBarSide == "Right" then
-        local bx = State.HealthBarSide == "Left" and (x - 6) or (x + w + 3)
-        rec.HealthGlowOutline.Position = Vector2.new(bx - 1, y - 1)
-        rec.HealthGlowOutline.Size = Vector2.new(thickness + 2, h + 2)
-        rec.HealthGlowOutline.Color = hpColor
-        rec.HealthGlowOutline.Visible = true
+        local bx = State.HealthBarSide == "Left" and (x - (thickness + 6)) or (x + w + 6)
+        local from = Vector2.new(bx, y + h)
+        local to = Vector2.new(bx, y)
+        local fillTo = Vector2.new(bx, y + h - (h * healthPct))
 
-        rec.HealthOutline.Position = Vector2.new(bx, y)
-        rec.HealthOutline.Size = Vector2.new(thickness, h)
-        rec.HealthOutline.Color = Color3.fromRGB(15,15,15)
-        rec.HealthOutline.Visible = true
+        rec.HealthBackLine.From = from
+        rec.HealthBackLine.To = to
+        rec.HealthBackLine.Color = Color3.fromRGB(16, 16, 18)
+        rec.HealthBackLine.Thickness = thickness + 3
+        rec.HealthBackLine.Visible = true
 
-        local fillH = math.max(1, h * healthPct)
-        rec.HealthGlowFill.Position = Vector2.new(bx, y + h - fillH)
-        rec.HealthGlowFill.Size = Vector2.new(thickness, fillH)
-        rec.HealthGlowFill.Color = hpColor
-        rec.HealthGlowFill.Visible = true
+        if State.ESPGlow then
+            rec.HealthGlowLine.From = from
+            rec.HealthGlowLine.To = fillTo
+            rec.HealthGlowLine.Color = hpColor
+            rec.HealthGlowLine.Thickness = thickness + 5
+            rec.HealthGlowLine.Visible = true
+        end
 
-        rec.HealthFill.Position = Vector2.new(bx+1, y + h - fillH + 1)
-        rec.HealthFill.Size = Vector2.new(math.max(1, thickness-2), math.max(1, fillH-2))
-        rec.HealthFill.Color = hpColor
-        rec.HealthFill.Visible = true
+        rec.HealthLine.From = from
+        rec.HealthLine.To = fillTo
+        rec.HealthLine.Color = hpColor
+        rec.HealthLine.Thickness = thickness
+        rec.HealthLine.Visible = true
     else
-        local by = State.HealthBarSide == "Top" and (y - 6) or (y + h + 3)
-        rec.HealthGlowOutline.Position = Vector2.new(x - 1, by - 1)
-        rec.HealthGlowOutline.Size = Vector2.new(w + 2, thickness + 2)
-        rec.HealthGlowOutline.Color = hpColor
-        rec.HealthGlowOutline.Visible = true
+        local by = State.HealthBarSide == "Top" and (y - (thickness + 6)) or (y + h + 6)
+        local from = Vector2.new(x, by)
+        local to = Vector2.new(x + w, by)
+        local fillTo = Vector2.new(x + (w * healthPct), by)
 
-        rec.HealthOutline.Position = Vector2.new(x, by)
-        rec.HealthOutline.Size = Vector2.new(w, thickness)
-        rec.HealthOutline.Color = Color3.fromRGB(15,15,15)
-        rec.HealthOutline.Visible = true
+        rec.HealthBackLine.From = from
+        rec.HealthBackLine.To = to
+        rec.HealthBackLine.Color = Color3.fromRGB(16, 16, 18)
+        rec.HealthBackLine.Thickness = thickness + 3
+        rec.HealthBackLine.Visible = true
 
-        local fillW = math.max(1, w * healthPct)
-        rec.HealthGlowFill.Position = Vector2.new(x, by)
-        rec.HealthGlowFill.Size = Vector2.new(fillW, thickness)
-        rec.HealthGlowFill.Color = hpColor
-        rec.HealthGlowFill.Visible = true
+        if State.ESPGlow then
+            rec.HealthGlowLine.From = from
+            rec.HealthGlowLine.To = fillTo
+            rec.HealthGlowLine.Color = hpColor
+            rec.HealthGlowLine.Thickness = thickness + 5
+            rec.HealthGlowLine.Visible = true
+        end
 
-        rec.HealthFill.Position = Vector2.new(x+1, by+1)
-        rec.HealthFill.Size = Vector2.new(math.max(1, fillW-2), math.max(1, thickness-2))
-        rec.HealthFill.Color = hpColor
-        rec.HealthFill.Visible = true
+        rec.HealthLine.From = from
+        rec.HealthLine.To = fillTo
+        rec.HealthLine.Color = hpColor
+        rec.HealthLine.Thickness = thickness
+        rec.HealthLine.Visible = true
     end
 end
 
@@ -906,6 +1087,7 @@ local function updateESP()
     for _, target in ipairs(targets) do
         local root = getRoot(target)
         local hum = getHumanoid(target)
+        local head = target:FindFirstChild("Head") or getTargetPart(target)
         if root and hum and hum.Health > 0 then
             local dist = distanceTo(root.Position)
             if dist <= State.ESPDistance then
@@ -924,39 +1106,50 @@ local function updateESP()
 
                     rec.BoxGlow.Visible = false
                     rec.Box.Visible = false
-                    for _, l in ipairs(rec.CornerGlow) do l.Visible = false end
-                    for _, l in ipairs(rec.Corners) do l.Visible = false end
                     rec.LineGlow.Visible = false
                     rec.Line.Visible = false
+                    for _, l in ipairs(rec.CornerGlow) do l.Visible = false end
+                    for _, l in ipairs(rec.Corners) do l.Visible = false end
+                    for _, l in ipairs(rec.CornerRoundGlow) do l.Visible = false end
+                    for _, l in ipairs(rec.CornerRound) do l.Visible = false end
 
                     if State.ESPStyle == "Box" then
-                        rec.BoxGlow.Position = Vector2.new(x, y)
-                        rec.BoxGlow.Size = Vector2.new(w, h)
-                        rec.BoxGlow.Color = c
-                        rec.BoxGlow.Visible = true
+                        if State.ESPGlow then
+                            rec.BoxGlow.Position = Vector2.new(x, y)
+                            rec.BoxGlow.Size = Vector2.new(w, h)
+                            rec.BoxGlow.Color = c
+                            rec.BoxGlow.Visible = true
+                        end
 
                         rec.Box.Position = Vector2.new(x, y)
                         rec.Box.Size = Vector2.new(w, h)
                         rec.Box.Color = c
                         rec.Box.Visible = true
                     else
-                        drawCornerBox(rec.Corners, x, y, w, h, c, rec.CornerGlow)
+                        drawCornerBox(rec, x, y, w, h, c)
                     end
 
                     if State.Tracers then
                         local origin = getTracerOrigin()
-                        rec.LineGlow.From = origin
-                        rec.LineGlow.To = Vector2.new(pos.X, y + h)
-                        rec.LineGlow.Color = c
-                        rec.LineGlow.Visible = true
+                        local headPoint = partToScreen(head)
+                        if not headPoint then headPoint = Vector2.new(pos.X, y) end
+                        if headPoint then
+                            if State.ESPGlow then
+                                rec.LineGlow.From = origin
+                                rec.LineGlow.To = headPoint
+                                rec.LineGlow.Color = c
+                                rec.LineGlow.Visible = true
+                            end
 
-                        rec.Line.From = origin
-                        rec.Line.To = Vector2.new(pos.X, y + h)
-                        rec.Line.Color = c
-                        rec.Line.Visible = true
+                            rec.Line.From = origin
+                            rec.Line.To = headPoint
+                            rec.Line.Color = c
+                            rec.Line.Visible = true
+                        end
                     end
 
                     drawHealth(rec, x, y, w, h, hum.Health / math.max(hum.MaxHealth, 1))
+                    drawSkeleton(rec, target, c, h)
                 end
             end
         end
@@ -1046,7 +1239,7 @@ local function refreshMenuState()
         App.Content.Visible = true
     end
     if App.Hotkey then
-        App.Hotkey.Text = "Menu: " .. State.MenuKey.Name .. "  |  Aim: " .. State.AimKey.Name
+        App.Hotkey.Text = "Menu: " .. State.MenuKey.Name .. "  |  Aim: " .. State.AimKey.Name .. " [" .. (State.AimActive and "ON" or "OFF") .. "]"
     end
     updateFOV()
 end
@@ -1098,14 +1291,14 @@ local function buildUI()
     local titleGlow = createGlowText(App.Header, "NEXHIDERA", UDim2.new(0,16,0,8), UDim2.new(0,400,0,24), 24, Enum.Font.GothamBlack, 5)
     local subtitleGlow = createGlowText(App.Header, "South Bronx: The Trenches ❗", UDim2.new(0,16,0,33), UDim2.new(0,330,0,18), 12, Enum.Font.GothamBold, 5)
 
-    local headerLight = create("Frame", {BackgroundColor3=Color3.fromRGB(255,255,255), BorderSizePixel=0, Position=UDim2.new(0,14,0,51), Size=UDim2.new(0,320,0,1), BackgroundTransparency=0.2})
+    local headerLight = create("Frame", {BackgroundColor3=Color3.fromRGB(255,255,255), BorderSizePixel=0, Position=UDim2.new(0,14,0,51), Size=UDim2.new(0,320,0,1), BackgroundTransparency=0.45})
     headerLight.Parent = App.Header
     addCorner(headerLight, 2)
-    local headerBloom = create("Frame", {BackgroundColor3=Color3.fromRGB(255,255,255), BorderSizePixel=0, Position=UDim2.new(0,6,0,46), Size=UDim2.new(0,336,0,10), BackgroundTransparency=0.88})
+    local headerBloom = create("Frame", {BackgroundColor3=Color3.fromRGB(255,255,255), BorderSizePixel=0, Position=UDim2.new(0,6,0,46), Size=UDim2.new(0,336,0,10), BackgroundTransparency=0.94})
     headerBloom.Parent = App.Header
     addCorner(headerBloom, 8)
     for _, ch in ipairs(subtitleGlow:GetChildren()) do
-        if ch:IsA("TextLabel") then ch.TextTransparency = ch.TextTransparency == 0 and 0.08 or 0.8 end
+        if ch:IsA("TextLabel") then ch.TextTransparency = ch.TextTransparency == 0 and 0.12 or 0.86 end
     end
 
     local buttons = create("Frame", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-14,0,14), Size=UDim2.new(0,156,0,28)})
@@ -1158,7 +1351,7 @@ local function buildUI()
     App.PageTitle.Parent = App.Content
     registerTheme(App.PageTitle, "TextColor3", "Text")
 
-    App.Hotkey = create("TextLabel", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-16,0,14), Size=UDim2.new(0,260,0,16), Text="Menu: " .. State.MenuKey.Name .. "  |  Aim: " .. State.AimKey.Name, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Right})
+    App.Hotkey = create("TextLabel", {BackgroundTransparency=1, AnchorPoint=Vector2.new(1,0), Position=UDim2.new(1,-16,0,14), Size=UDim2.new(0,260,0,16), Text="Menu: " .. State.MenuKey.Name .. "  |  Aim: " .. State.AimKey.Name .. " [" .. (State.AimActive and "ON" or "OFF") .. "]", Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Right})
     App.Hotkey.Parent = App.Content
     registerTheme(App.Hotkey, "TextColor3", "Sub")
 
@@ -1223,15 +1416,18 @@ local function buildPages()
 
     local vis = createSection(visual, "ESP", "Visual options start disabled and you activate what you want")
     createToggle(vis, "Enable ESP", "Master toggle for the ESP system", false, function(v) State.ESPEnabled = v end)
-    createToggle(vis, "Players", "Show ESP for players", true, function(v) State.ESPPlayers = v end)
-    createToggle(vis, "NPCs", "Show ESP for NPCs with humanoid", true, function(v) State.ESPNPCs = v end)
+    createToggle(vis, "Players", "Show ESP for players", false, function(v) State.ESPPlayers = v end)
+    createToggle(vis, "NPCs", "Show ESP for NPCs with humanoid", false, function(v) State.ESPNPCs = v end)
     createSlider(vis, "Max Distance", "How far the ESP can render", 50, 2000, 500, 10, function(v) State.ESPDistance = v end)
     createColorPicker(vis, "ESP Color", "Open a palette menu and pick a color", State.ESPColor, function(c) State.ESPColor = c end)
     createDropdown(vis, "ESP Style", "Choose between normal box or corner", {"Box", "Corner"}, State.ESPStyle, function(v) State.ESPStyle = v end)
-    createToggle(vis, "ESP Lines", "Draw tracers to the target", false, function(v) State.Tracers = v end)
+    createToggle(vis, "ESP Lines", "Draw tracers to the head", false, function(v) State.Tracers = v end)
     createDropdown(vis, "Lines Origin", "Target-style menu for top, center or bottom", {"Top", "Center", "Bottom"}, State.TracerOrigin, function(v) State.TracerOrigin = v end)
     createToggle(vis, "Health Bar", "Show health bar on the box", false, function(v) State.HealthBar = v end)
     createDropdown(vis, "Health Position", "Choose left, right, top or bottom", {"Left", "Right", "Top", "Bottom"}, State.HealthBarSide, function(v) State.HealthBarSide = v end)
+    createSlider(vis, "Health Thickness", "Adjust the thickness of the health bar", 1, 12, State.HealthBarThickness, 1, function(v) State.HealthBarThickness = v end)
+    createToggle(vis, "Skeleton", "Draw a skeleton with a head circle", false, function(v) State.Skeleton = v end)
+    createToggle(vis, "Glow", "Enable glow effect for ESP, skeleton and health", false, function(v) State.ESPGlow = v end)
     createToggle(vis, "Character Window", "Show a right-side window with your character", false, function(v)
         State.CharacterPreview = v
         rebuildPreview()
@@ -1239,13 +1435,17 @@ local function buildPages()
     end)
 
     local cbt = createSection(combat, "Combat / Aim", "All options start disabled")
-    createToggle(cbt, "Enable Combat Page", "Master toggle for this tab", false, function(v) State.CombatEnabled = v end)
+    createToggle(cbt, "Enable Combat Page", "Master toggle for this tab", false, function(v)
+        State.CombatEnabled = v
+        if not v then State.AimActive = false end
+        refreshMenuState()
+    end)
     createToggle(cbt, "Show FOV", "Only shows the FOV circle", false, function(v) State.ShowFOV = v updateFOV() end)
     createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, 150, 1, function(v) State.FOV = v updateFOV() end)
     createSlider(cbt, "Smooth", "Range from 0 to 10", 0, 10, 0, 0.1, function(v) State.Smooth = v end)
-    createKeybind(cbt, "Aim Key", "Choose the key for activating the aim", State.AimKey, function(v) State.AimKey = v refreshMenuState() end)
+    createKeybind(cbt, "Aim Key", "Choose the key for toggling the aim on and off", State.AimKey, function(v) State.AimKey = v refreshMenuState() end)
     createDropdown(cbt, "Aim Part", "Choose head or chest", {"Head", "Chest", "HumanoidRootPart"}, State.AimPart, function(v) State.AimPart = v end)
-    createParagraph(cbt, "Aim Status", "Hold your selected aim key while Combat Enabled is on. FOV now stays visible even when the menu is hidden.")
+    createParagraph(cbt, "Aim Status", "Press the aim key once to activate and press it again to deactivate. The FOV stays visible even when the menu is hidden.")
 
     local set = createSection(settings, "Settings", "Menu controls")
     createKeybind(set, "Menu Hotkey", "Choose the key to hide and show the menu", State.MenuKey, function(v) State.MenuKey = v refreshMenuState() end)
@@ -1305,7 +1505,11 @@ local function hookButtons()
             refreshMenuState()
             return
         elseif input.KeyCode == State.AimKey then
-            State.AimHeld = true
+            if State.CombatEnabled then
+                State.AimActive = not State.AimActive
+                refreshMenuState()
+                notify("Aim", State.AimActive and "Aim activado." or "Aim desactivado.")
+            end
             return
         end
 
@@ -1322,11 +1526,6 @@ local function hookButtons()
                     end
                 end
             end
-        end
-    end))
-    table.insert(App.Connections, UserInputService.InputEnded:Connect(function(input)
-        if input.KeyCode == State.AimKey then
-            State.AimHeld = false
         end
     end))
 end
