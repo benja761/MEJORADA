@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -6,6 +5,7 @@ local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -34,6 +34,10 @@ local App = {
     Connections = {},
     SearchEntries = {},
     PreviewEnabled = false,
+    Controls = {},
+    TargetCache = {},
+    ThumbCache = {},
+    PlayerCards = {},
 }
 
 local State = {
@@ -67,7 +71,20 @@ local State = {
     FOV = 150,
     Smooth = 0,
     AimPart = "Head",
+    WallCheck = false,
+
+    RenderPriority = "Crosshair",
+    MaxRenderedTargets = 12,
+    MaxSkeletonTargets = 5,
+    MaxTracerTargets = 8,
+    MaxNameTargets = 12,
+    TargetRefreshRate = 0.08,
+
+    ConfigName = "default",
+    SelectedConfig = "default",
 }
+
+local notify, rebuildPreview, refreshMenuState, updateFOV, refreshLobbyCards
 
 local Palette = {
     {"White", Color3.fromRGB(255,255,255)}, {"Red", Color3.fromRGB(255,90,90)},
@@ -175,6 +192,209 @@ local function applyTheme()
     end
 end
 
+local function bindControl(name, control)
+    App.Controls[name] = control
+    return control
+end
+
+local function serializeColor3(c)
+    return {R = c.R, G = c.G, B = c.B}
+end
+
+local function deserializeColor3(t)
+    if typeof(t) == "Color3" then return t end
+    if type(t) == "table" and t.R and t.G and t.B then
+        return Color3.new(t.R, t.G, t.B)
+    end
+    return State.ESPColor
+end
+
+local function serializeBind(bind)
+    if typeof(bind) ~= "EnumItem" then return nil end
+    return {EnumType = bind.EnumType.Name, Name = bind.Name}
+end
+
+local function deserializeBind(data, fallback)
+    if typeof(data) == "EnumItem" then return data end
+    if type(data) ~= "table" then return fallback end
+    if data.EnumType == "KeyCode" and Enum.KeyCode[data.Name] then
+        return Enum.KeyCode[data.Name]
+    elseif data.EnumType == "UserInputType" and Enum.UserInputType[data.Name] then
+        return Enum.UserInputType[data.Name]
+    end
+    return fallback
+end
+
+local function canUseFiles()
+    return typeof(writefile) == "function" and typeof(readfile) == "function" and typeof(isfile) == "function" and typeof(listfiles) == "function"
+end
+
+local function ensureConfigFolder()
+    if typeof(makefolder) == "function" and typeof(isfolder) == "function" and not isfolder("NexhideraConfigs") then
+        pcall(makefolder, "NexhideraConfigs")
+    end
+end
+
+local function listConfigNames()
+    if not canUseFiles() then
+        return {"default"}
+    end
+    ensureConfigFolder()
+    local out, seen = {}, {}
+    local ok, files = pcall(listfiles, "NexhideraConfigs")
+    if ok and type(files) == "table" then
+        for _, file in ipairs(files) do
+            local name = string.match(file, "([^/\]+)%.json$")
+            if name and not seen[name] then
+                seen[name] = true
+                table.insert(out, name)
+            end
+        end
+    end
+    table.sort(out, function(a, b) return string.lower(a) < string.lower(b) end)
+    if #out == 0 then
+        out = {"default"}
+    end
+    return out
+end
+
+local function getConfigPath(name)
+    local clean = tostring(name or "default"):gsub("[^%w_%-]", "_")
+    if clean == "" then clean = "default" end
+    return clean, ("NexhideraConfigs/%s.json"):format(clean)
+end
+
+local function applyLoadedState(data)
+    local color = deserializeColor3(data.ESPColor)
+    local menuKey = deserializeBind(data.MenuKey, State.MenuKey)
+    local aimKey = deserializeBind(data.AimKey, State.AimKey)
+
+    local function setIf(name, value)
+        local control = App.Controls[name]
+        if control and control.Set then
+            control:Set(value)
+        end
+    end
+
+    setIf("MenuKey", menuKey)
+    setIf("AimKey", aimKey)
+    setIf("ESPEnabled", data.ESPEnabled == true)
+    setIf("ESPPlayers", data.ESPPlayers == true)
+    setIf("ESPNPCs", data.ESPNPCs == true)
+    setIf("ESPDistance", tonumber(data.ESPDistance) or State.ESPDistance)
+    setIf("ESPColor", color)
+    setIf("ESPStyle", data.ESPStyle or State.ESPStyle)
+    setIf("Tracers", data.Tracers == true)
+    setIf("TracerOrigin", data.TracerOrigin or State.TracerOrigin)
+    setIf("HealthBar", data.HealthBar == true)
+    setIf("HealthBarSide", data.HealthBarSide or State.HealthBarSide)
+    setIf("HealthBarThickness", tonumber(data.HealthBarThickness) or State.HealthBarThickness)
+    setIf("Skeleton", data.Skeleton == true)
+    setIf("SkeletonType", data.SkeletonType or State.SkeletonType)
+    setIf("SkeletonThickness", tonumber(data.SkeletonThickness) or State.SkeletonThickness)
+    setIf("ESPNames", data.ESPNames == true)
+    setIf("ESPNameSize", tonumber(data.ESPNameSize) or State.ESPNameSize)
+    setIf("ESPGlow", data.ESPGlow == true)
+    setIf("CharacterPreview", data.CharacterPreview == true)
+    setIf("CombatEnabled", data.CombatEnabled == true)
+    setIf("ShowFOV", data.ShowFOV == true)
+    setIf("FOV", tonumber(data.FOV) or State.FOV)
+    setIf("Smooth", tonumber(data.Smooth) or State.Smooth)
+    setIf("AimPart", data.AimPart or State.AimPart)
+    setIf("WallCheck", data.WallCheck == true)
+    setIf("RenderPriority", data.RenderPriority or State.RenderPriority)
+    setIf("MaxRenderedTargets", tonumber(data.MaxRenderedTargets) or State.MaxRenderedTargets)
+    setIf("MaxSkeletonTargets", tonumber(data.MaxSkeletonTargets) or State.MaxSkeletonTargets)
+    setIf("MaxTracerTargets", tonumber(data.MaxTracerTargets) or State.MaxTracerTargets)
+    setIf("MaxNameTargets", tonumber(data.MaxNameTargets) or State.MaxNameTargets)
+    setIf("TargetRefreshRate", tonumber(data.TargetRefreshRate) or State.TargetRefreshRate)
+
+    local selected = tostring(data.ConfigName or data.SelectedConfig or "default")
+    State.ConfigName = selected
+    State.SelectedConfig = selected
+    if App.Controls.ConfigName then App.Controls.ConfigName.Set(selected) end
+    if App.Controls.SelectedConfig then App.Controls.SelectedConfig.Set(selected) end
+
+    rebuildPreview()
+    refreshMenuState()
+    updateFOV()
+end
+
+local function saveCurrentConfig(name)
+    local clean, path = getConfigPath(name)
+    State.ConfigName = clean
+    State.SelectedConfig = clean
+    if not canUseFiles() then
+        notify("Config", "Tu ejecutor no soporta writefile/readfile.")
+        return false
+    end
+    ensureConfigFolder()
+    local payload = {
+        ConfigName = clean,
+        MenuKey = serializeBind(State.MenuKey),
+        AimKey = serializeBind(State.AimKey),
+        ESPEnabled = State.ESPEnabled,
+        ESPPlayers = State.ESPPlayers,
+        ESPNPCs = State.ESPNPCs,
+        ESPDistance = State.ESPDistance,
+        ESPColor = serializeColor3(State.ESPColor),
+        ESPStyle = State.ESPStyle,
+        Tracers = State.Tracers,
+        TracerOrigin = State.TracerOrigin,
+        HealthBar = State.HealthBar,
+        HealthBarSide = State.HealthBarSide,
+        HealthBarThickness = State.HealthBarThickness,
+        Skeleton = State.Skeleton,
+        SkeletonType = State.SkeletonType,
+        SkeletonThickness = State.SkeletonThickness,
+        ESPNames = State.ESPNames,
+        ESPNameSize = State.ESPNameSize,
+        ESPGlow = State.ESPGlow,
+        CharacterPreview = State.CharacterPreview,
+        CombatEnabled = State.CombatEnabled,
+        ShowFOV = State.ShowFOV,
+        FOV = State.FOV,
+        Smooth = State.Smooth,
+        AimPart = State.AimPart,
+        WallCheck = State.WallCheck,
+        RenderPriority = State.RenderPriority,
+        MaxRenderedTargets = State.MaxRenderedTargets,
+        MaxSkeletonTargets = State.MaxSkeletonTargets,
+        MaxTracerTargets = State.MaxTracerTargets,
+        MaxNameTargets = State.MaxNameTargets,
+        TargetRefreshRate = State.TargetRefreshRate,
+    }
+    local ok, err = pcall(function()
+        writefile(path, HttpService:JSONEncode(payload))
+    end)
+    if not ok then
+        notify("Config", "No se pudo guardar: " .. tostring(err))
+        return false
+    end
+    return clean
+end
+
+local function loadSavedConfig(name)
+    local clean, path = getConfigPath(name)
+    if not canUseFiles() then
+        notify("Config", "Tu ejecutor no soporta readfile/listfiles.")
+        return false
+    end
+    if not isfile(path) then
+        notify("Config", "No existe esa config.")
+        return false
+    end
+    local ok, decoded = pcall(function()
+        return HttpService:JSONDecode(readfile(path))
+    end)
+    if not ok or type(decoded) ~= "table" then
+        notify("Config", "Archivo de config inválido.")
+        return false
+    end
+    applyLoadedState(decoded)
+    return clean
+end
+
 local function getCharacter()
     return LocalPlayer.Character
 end
@@ -279,7 +499,7 @@ local function createGlowText(parent, text, pos, size, textSize, font, z)
     return holder
 end
 
-local function notify(title, body)
+notify = function(title, body)
     if not App.NotificationHolder then return end
     local card = create("Frame", {
         BackgroundTransparency = 0,
@@ -577,22 +797,32 @@ local function createDropdown(parent, title, desc, values, default, cb)
     lay.Parent = sf
 
     local state = default
+    local currentValues = values or {}
+
     local function set(v)
         state = v
         b.Text = tostring(v)
         if cb then cb(v) end
     end
 
-    for _, v in ipairs(values) do
-        local row = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Size=UDim2.new(1,0,0,20), Text=tostring(v), Font=Enum.Font.Gotham, TextSize=12, AutoButtonColor=false, ZIndex=101})
-        row.Parent = sf
-        registerTheme(row, "BackgroundColor3", "Panel2")
-        registerTheme(row, "TextColor3", "Text")
-        addCorner(row, 6)
-        row.MouseButton1Click:Connect(function()
-            set(v)
-            popup.Visible = false
-        end)
+    local function rebuildRows()
+        for _, child in ipairs(sf:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+        for _, v in ipairs(currentValues) do
+            local row = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Size=UDim2.new(1,0,0,20), Text=tostring(v), Font=Enum.Font.Gotham, TextSize=12, AutoButtonColor=false, ZIndex=101})
+            row.Parent = sf
+            registerTheme(row, "BackgroundColor3", "Panel2")
+            registerTheme(row, "TextColor3", "Text")
+            addCorner(row, 6)
+            row.MouseButton1Click:Connect(function()
+                set(v)
+                popup.Visible = false
+            end)
+        end
+        popup.Size = UDim2.new(0, popupWidth, 0, math.min(#currentValues, 6) * 24 + 12)
     end
 
     b.MouseButton1Click:Connect(function()
@@ -602,8 +832,25 @@ local function createDropdown(parent, title, desc, values, default, cb)
         popup.Visible = not popup.Visible
     end)
 
+    rebuildRows()
     set(default)
-    return {Set=set, Get=function() return state end}
+    return {
+        Set=set,
+        Get=function() return state end,
+        SetOptions=function(newValues, preferred)
+            currentValues = newValues or {}
+            rebuildRows()
+            if preferred ~= nil then
+                set(preferred)
+            elseif #currentValues > 0 then
+                local found = false
+                for _, item in ipairs(currentValues) do
+                    if item == state then found = true break end
+                end
+                if not found then set(currentValues[1]) end
+            end
+        end
+    }
 end
 
 local function createColorPicker(parent, title, desc, defaultColor, cb)
@@ -657,6 +904,35 @@ local function createColorPicker(parent, title, desc, defaultColor, cb)
 
     set(defaultColor)
     return {Set=set, Get=function() return state end}
+end
+
+local function createTextbox(parent, title, desc, default, placeholder, cb)
+    local h = controlHolder(parent, 46)
+    local t = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,7), Size=UDim2.new(1,-170,0,16), Text=title, Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+    t.Parent = h
+    registerTheme(t, "TextColor3", "Text")
+    local d = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,23), Size=UDim2.new(1,-170,0,14), Text=desc, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    d.Parent = h
+    registerTheme(d, "TextColor3", "Sub")
+
+    local box = create("TextBox", {AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-12,0.5,0), Size=UDim2.new(0,150,0,26), Text=tostring(default or ""), PlaceholderText=placeholder or "config", ClearTextOnFocus=false, Font=Enum.Font.GothamBold, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left, BorderSizePixel=0})
+    box.Parent = h
+    registerTheme(box, "BackgroundColor3", "Main")
+    registerTheme(box, "TextColor3", "Text")
+    addCorner(box, 8)
+    addStroke(box)
+    addPadding(box, 10,10,0,0)
+
+    local state = tostring(default or "")
+    local function set(v)
+        state = tostring(v or "")
+        box.Text = state
+        if cb then cb(state) end
+    end
+    box.FocusLost:Connect(function()
+        set(box.Text)
+    end)
+    return {Set=set, Get=function() return state end, Box=box}
 end
 
 local function switchTab(name)
@@ -941,12 +1217,65 @@ local function partToScreen(part)
     return nil
 end
 
-local function drawSkeleton(rec, model, color, boxH)
+local function passesWallCheck(model, part)
+    if not State.WallCheck then return true end
+    if not model or not part then return false end
+    local origin = Camera.CFrame.Position
+    local direction = part.Position - origin
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = {getCharacter(), App.PreviewClone}
+    params.IgnoreWater = true
+    local result = Workspace:Raycast(origin, direction, params)
+    if not result then return true end
+    return result.Instance and result.Instance:IsDescendantOf(model)
+end
+
+local function getPriorityScore(model)
+    local root = getRoot(model)
+    local part = getTargetPart(model) or root
+    if not root or not part then return math.huge end
+    local dist = distanceTo(root.Position)
+    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+    local crosshair = math.huge
+    if onScreen and screenPos.Z > 0 then
+        crosshair = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)).Magnitude
+    end
+    if State.RenderPriority == "Distance" then
+        return dist
+    elseif State.RenderPriority == "Health" then
+        local hum = getHumanoid(model)
+        return hum and hum.Health or math.huge
+    end
+    return crosshair
+end
+
+local function refreshTargetCache()
+    App.TargetCache = {}
+    if not (State.ESPEnabled or State.CombatEnabled) then return end
+    local pool = {}
+    for _, model in ipairs(collectTargets()) do
+        local root = getRoot(model)
+        local hum = getHumanoid(model)
+        if root and hum and hum.Health > 0 then
+            local dist = distanceTo(root.Position)
+            if dist <= State.ESPDistance + 50 then
+                table.insert(pool, {Model = model, Score = getPriorityScore(model), Distance = dist})
+            end
+        end
+    end
+    table.sort(pool, function(a, b) return a.Score < b.Score end)
+    for i = 1, math.min(#pool, math.max(1, State.MaxRenderedTargets)) do
+        App.TargetCache[i] = pool[i].Model
+    end
+end
+
+local function drawSkeleton(rec, model, color, boxH, enabled)
     for _, l in ipairs(rec.SkeletonGlow) do l.Visible = false end
     for _, l in ipairs(rec.Skeleton) do l.Visible = false end
     rec.HeadGlow.Visible = false
     rec.HeadCircle.Visible = false
-    if not State.Skeleton then return end
+    if not enabled then return end
 
     local head = getPartByNames(model, {"Head"})
     local upper = getPartByNames(model, {"UpperTorso", "Torso"})
@@ -1047,17 +1376,25 @@ local function getAimTarget()
     local center = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
     local bestPart, bestDistance = nil, math.huge
     local radius = math.max(0, tonumber(State.FOV) or 0)
+    local source = (#App.TargetCache > 0 and App.TargetCache) or collectTargets()
 
-    for _, model in ipairs(collectTargets()) do
+    for _, model in ipairs(source) do
         local hum = getHumanoid(model)
         local part = getTargetPart(model)
-        if hum and hum.Health > 0 and part then
+        if hum and hum.Health > 0 and part and passesWallCheck(model, part) then
             local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
             if onScreen and screenPos.Z > 0 then
                 local diff = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
                 if (radius <= 0 and diff <= 8) or (radius > 0 and diff <= radius) then
-                    if diff < bestDistance then
-                        bestDistance = diff
+                    local metric = diff
+                    if State.RenderPriority == "Distance" then
+                        local root = getRoot(model)
+                        metric = root and distanceTo(root.Position) or diff
+                    elseif State.RenderPriority == "Health" then
+                        metric = hum.Health
+                    end
+                    if metric < bestDistance then
+                        bestDistance = metric
                         bestPart = part
                     end
                 end
@@ -1140,10 +1477,10 @@ local function drawCornerBox(rec, x, y, w, h, color)
     end
 end
 
-local function drawName(rec, displayText, x, y, w, color)
+local function drawName(rec, displayText, x, y, w, color, enabled)
     rec.NameShadow.Visible = false
     rec.NameText.Visible = false
-    if not State.ESPNames then return end
+    if not enabled then return end
 
     local size = math.clamp(tonumber(State.ESPNameSize) or 13, 10, 28)
     local pos = Vector2.new(x + (w * 0.5), y - size - 2)
@@ -1253,8 +1590,8 @@ end
 
 local function updateESP()
     local live = {}
-    local targets = State.ESPEnabled and collectTargets() or {}
-    for _, target in ipairs(targets) do
+    local targets = State.ESPEnabled and App.TargetCache or {}
+    for rank, target in ipairs(targets) do
         local root = getRoot(target)
         local hum = getHumanoid(target)
         local head = target:FindFirstChild("Head") or getTargetPart(target)
@@ -1299,7 +1636,7 @@ local function updateESP()
                         drawCornerBox(rec, x, y, w, h, c)
                     end
 
-                    if State.Tracers then
+                    if State.Tracers and rank <= State.MaxTracerTargets then
                         local origin = getTracerOrigin()
                         local headPoint = partToScreen(head)
                         if not headPoint then headPoint = Vector2.new(pos.X, y) end
@@ -1319,13 +1656,13 @@ local function updateESP()
                     end
 
                     drawHealth(rec, x, y, w, h, hum.Health / math.max(hum.MaxHealth, 1))
-                    drawSkeleton(rec, target, c, h)
+                    drawSkeleton(rec, target, c, h, State.Skeleton and rank <= State.MaxSkeletonTargets)
                     local nameText = target.Name
                     local owner = Players:GetPlayerFromCharacter(target)
                     if owner then
                         nameText = owner.DisplayName
                     end
-                    drawName(rec, nameText, x, y, w, c)
+                    drawName(rec, nameText, x, y, w, c, State.ESPNames and rank <= State.MaxNameTargets)
                 end
             end
         end
@@ -1340,7 +1677,7 @@ local function updateESP()
     end
 end
 
-local function updateFOV()
+updateFOV = function()
     if not App.FOVCircle then return end
     local size = math.max(0, State.FOV) * 2
     App.FOVCircle.Size = UDim2.new(0, size, 0, size)
@@ -1353,7 +1690,7 @@ local function clearPreview()
     if App.PreviewClone then App.PreviewClone:Destroy(); App.PreviewClone = nil end
 end
 
-local function rebuildPreview()
+rebuildPreview = function()
     clearPreview()
     if not App.Viewport or not State.CharacterPreview then
         if App.PreviewWindow then App.PreviewWindow.Visible = false end
@@ -1396,7 +1733,7 @@ local function rebuildPreview()
     light.Parent = cam
 end
 
-local function refreshMenuState()
+refreshMenuState = function()
     if not App.Root then return end
     App.Root.Visible = State.MenuVisible
     if App.PreviewWindow then
@@ -1506,7 +1843,7 @@ local function buildUI()
     local tl = create("UIListLayout", {Padding=UDim.new(0,8)})
     tl.Parent = tabs
 
-    for _, name in ipairs({"Main","Visual","Combat","Settings"}) do
+    for _, name in ipairs({"Main","Visual","Combat","Perf","Settings"}) do
         local b = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Size=UDim2.new(1,0,0,38), Text=name, Font=Enum.Font.GothamBold, TextSize=13, AutoButtonColor=false})
         b.Parent = tabs
         registerTheme(b, "BackgroundColor3", "Panel")
@@ -1575,10 +1912,84 @@ local function buildUI()
     applyTheme()
 end
 
+refreshLobbyCards = function()
+    if not App.LobbyGrid then return end
+    for _, child in ipairs(App.LobbyGrid:GetChildren()) do
+        if child:IsA("Frame") then
+            child:Destroy()
+        end
+    end
+
+    local playersList = Players:GetPlayers()
+    table.sort(playersList, function(a, b) return string.lower(a.DisplayName) < string.lower(b.DisplayName) end)
+
+    for order, plr in ipairs(playersList) do
+        local card = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, LayoutOrder=order})
+        card.Parent = App.LobbyGrid
+        registerTheme(card, "BackgroundColor3", "Panel2")
+        addCorner(card, 12)
+        addStroke(card)
+
+        local avatar = create("ImageLabel", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,10,0,10), Size=UDim2.new(0,44,0,44), Image=""})
+        avatar.Parent = card
+        registerTheme(avatar, "BackgroundColor3", "Main")
+        addCorner(avatar, 22)
+        addStroke(avatar)
+        if not App.ThumbCache[plr.UserId] then
+            task.spawn(function()
+                local ok, image = pcall(function()
+                    return Players:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+                end)
+                if ok then
+                    App.ThumbCache[plr.UserId] = image
+                    if avatar.Parent then avatar.Image = image end
+                end
+            end)
+        else
+            avatar.Image = App.ThumbCache[plr.UserId]
+        end
+
+        local name = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,62,0,10), Size=UDim2.new(1,-72,0,16), Text=plr.DisplayName, Font=Enum.Font.GothamBold, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
+        name.Parent = card
+        registerTheme(name, "TextColor3", "Text")
+
+        local user = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,62,0,26), Size=UDim2.new(1,-72,0,14), Text='@' .. plr.Name, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+        user.Parent = card
+        registerTheme(user, "TextColor3", "Sub")
+
+        local age = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,62), Size=UDim2.new(1,-20,0,14), Text='Days: ' .. tostring(plr.AccountAge), Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+        age.Parent = card
+        registerTheme(age, "TextColor3", "Sub")
+
+        local distText = "Distance: --"
+        if plr.Character and getRoot(plr.Character) then
+            distText = 'Distance: ' .. tostring(math.floor(distanceTo(getRoot(plr.Character).Position)))
+        end
+        local dist = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,76), Size=UDim2.new(1,-20,0,14), Text=distText, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+        dist.Parent = card
+        registerTheme(dist, "TextColor3", "Sub")
+
+        local btn = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(1,-74,1,-32), Size=UDim2.new(0,64,0,22), Text='Watch', Font=Enum.Font.GothamBold, TextSize=11, AutoButtonColor=false})
+        btn.Parent = card
+        registerTheme(btn, "BackgroundColor3", "Main")
+        registerTheme(btn, "TextColor3", "Text")
+        addCorner(btn, 8)
+        addStroke(btn)
+        btn.MouseButton1Click:Connect(function()
+            local hum = plr.Character and getHumanoid(plr.Character)
+            if hum then
+                Camera.CameraSubject = hum
+                notify("Perf", "Ahora mirando a " .. plr.DisplayName)
+            end
+        end)
+    end
+end
+
 local function buildPages()
     local main = makePage("Main")
     local visual = makePage("Visual")
     local combat = makePage("Combat")
+    local perf = makePage("Perf")
     local settings = makePage("Settings")
 
     local profile = createSection(main, "Profile", "Your Roblox info inside the main tab")
@@ -1591,51 +2002,92 @@ local function buildPages()
     end)
 
     local vis = createSection(visual, "ESP", "Visual options start disabled and you activate what you want")
-    createToggle(vis, "Enable ESP", "Master toggle for the ESP system", false, function(v) State.ESPEnabled = v end)
-    createToggle(vis, "Players", "Show ESP for players", false, function(v) State.ESPPlayers = v end)
-    createToggle(vis, "NPCs", "Show ESP for NPCs with humanoid", false, function(v) State.ESPNPCs = v end)
-    createSlider(vis, "Max Distance", "How far the ESP can render", 50, 2000, 500, 10, function(v) State.ESPDistance = v end)
-    createColorPicker(vis, "ESP Color", "Open a palette menu and pick a color", State.ESPColor, function(c) State.ESPColor = c end)
-    createDropdown(vis, "ESP Style", "Choose between normal box or corner", {"Box", "Corner"}, State.ESPStyle, function(v) State.ESPStyle = v end)
-    createToggle(vis, "ESP Lines", "Draw tracers to the head", false, function(v) State.Tracers = v end)
-    createDropdown(vis, "Lines Origin", "Target-style menu for top, center or bottom", {"Top", "Center", "Bottom"}, State.TracerOrigin, function(v) State.TracerOrigin = v end)
-    createToggle(vis, "Health Bar", "Show health bar on the box", false, function(v) State.HealthBar = v end)
-    createDropdown(vis, "Health Position", "Choose left, right, top or bottom", {"Left", "Right", "Top", "Bottom"}, State.HealthBarSide, function(v) State.HealthBarSide = v end)
-    createSlider(vis, "Health Thickness", "Adjust the thickness of the health bar", 1, 12, State.HealthBarThickness, 1, function(v) State.HealthBarThickness = v end)
-    createToggle(vis, "Skeleton", "Draw a skeleton with a head circle", false, function(v) State.Skeleton = v end)
-    createDropdown(vis, "Skeleton Type", "Choose the current or normal skeleton", {"Current", "Normal"}, State.SkeletonType, function(v) State.SkeletonType = v end)
-    createSlider(vis, "Skeleton Thickness", "Adjust the skeleton thickness", 1, 8, State.SkeletonThickness, 0.1, function(v) State.SkeletonThickness = v end)
-    createToggle(vis, "Names", "Show names above the ESP", false, function(v) State.ESPNames = v end)
-    createSlider(vis, "Text Size", "Adjust the name text size", 10, 28, State.ESPNameSize, 1, function(v) State.ESPNameSize = v end)
-    createToggle(vis, "Glow", "Enable glow effect for ESP, skeleton and health", false, function(v) State.ESPGlow = v end)
-    createToggle(vis, "Character Window", "Show a right-side window with your character", false, function(v)
+    bindControl("ESPEnabled", createToggle(vis, "Enable ESP", "Master toggle for the ESP system", false, function(v) State.ESPEnabled = v end))
+    bindControl("ESPPlayers", createToggle(vis, "Players", "Show ESP for players", false, function(v) State.ESPPlayers = v end))
+    bindControl("ESPNPCs", createToggle(vis, "NPCs", "Show ESP for NPCs with humanoid", false, function(v) State.ESPNPCs = v end))
+    bindControl("ESPDistance", createSlider(vis, "Max Distance", "How far the ESP can render", 50, 2000, 500, 10, function(v) State.ESPDistance = v end))
+    bindControl("ESPColor", createColorPicker(vis, "ESP Color", "Open a palette menu and pick a color", State.ESPColor, function(c) State.ESPColor = c end))
+    bindControl("ESPStyle", createDropdown(vis, "ESP Style", "Choose between normal box or corner", {"Box", "Corner"}, State.ESPStyle, function(v) State.ESPStyle = v end))
+    bindControl("Tracers", createToggle(vis, "ESP Lines", "Draw tracers to the head", false, function(v) State.Tracers = v end))
+    bindControl("TracerOrigin", createDropdown(vis, "Lines Origin", "Target-style menu for top, center or bottom", {"Top", "Center", "Bottom"}, State.TracerOrigin, function(v) State.TracerOrigin = v end))
+    bindControl("HealthBar", createToggle(vis, "Health Bar", "Show health bar on the box", false, function(v) State.HealthBar = v end))
+    bindControl("HealthBarSide", createDropdown(vis, "Health Position", "Choose left, right, top or bottom", {"Left", "Right", "Top", "Bottom"}, State.HealthBarSide, function(v) State.HealthBarSide = v end))
+    bindControl("HealthBarThickness", createSlider(vis, "Health Thickness", "Adjust the thickness of the health bar", 1, 12, State.HealthBarThickness, 1, function(v) State.HealthBarThickness = v end))
+    bindControl("Skeleton", createToggle(vis, "Skeleton", "Draw a skeleton with a head circle", false, function(v) State.Skeleton = v end))
+    bindControl("SkeletonType", createDropdown(vis, "Skeleton Type", "Choose the current or normal skeleton", {"Current", "Normal"}, State.SkeletonType, function(v) State.SkeletonType = v end))
+    bindControl("SkeletonThickness", createSlider(vis, "Skeleton Thickness", "Adjust the skeleton thickness", 1, 8, State.SkeletonThickness, 0.1, function(v) State.SkeletonThickness = v end))
+    bindControl("ESPNames", createToggle(vis, "Names", "Show names above the ESP", false, function(v) State.ESPNames = v end))
+    bindControl("ESPNameSize", createSlider(vis, "Text Size", "Adjust the name text size", 10, 28, State.ESPNameSize, 1, function(v) State.ESPNameSize = v end))
+    bindControl("ESPGlow", createToggle(vis, "Glow", "Enable glow effect for ESP, skeleton and health", false, function(v) State.ESPGlow = v end))
+    bindControl("CharacterPreview", createToggle(vis, "Character Window", "Show a right-side window with your character", false, function(v)
         State.CharacterPreview = v
         rebuildPreview()
         refreshMenuState()
-    end)
+    end))
 
     local cbt = createSection(combat, "Combat / Aim", "All options start disabled")
-    createToggle(cbt, "Enable Combat Page", "Master toggle for this tab", false, function(v)
+    bindControl("CombatEnabled", createToggle(cbt, "Enable Combat Page", "Master toggle for this tab", false, function(v)
         State.CombatEnabled = v
         if not v then State.AimActive = false end
         refreshMenuState()
-    end)
-    createToggle(cbt, "Show FOV", "Only shows the FOV circle", false, function(v) State.ShowFOV = v; updateFOV() end)
-    createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, 150, 1, function(v) State.FOV = v; updateFOV() end)
-    createSlider(cbt, "Smooth", "Range from 0 to 10", 0, 10, 0, 0.1, function(v) State.Smooth = v end)
-    createKeybind(cbt, "Aim Key", "Choose the key for toggling the aim on and off", State.AimKey, function(v) State.AimKey = v; refreshMenuState() end)
-    createDropdown(cbt, "Aim Part", "Choose head or chest", {"Head", "Chest", "HumanoidRootPart"}, State.AimPart, function(v) State.AimPart = v end)
+    end))
+    bindControl("ShowFOV", createToggle(cbt, "Show FOV", "Only shows the FOV circle", false, function(v) State.ShowFOV = v; updateFOV() end))
+    bindControl("FOV", createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, 150, 1, function(v) State.FOV = v; updateFOV() end))
+    bindControl("Smooth", createSlider(cbt, "Smooth", "Range from 0 to 10", 0, 10, 0, 0.1, function(v) State.Smooth = v end))
+    bindControl("AimKey", createKeybind(cbt, "Aim Key", "Choose the key for toggling the aim on and off", State.AimKey, function(v) State.AimKey = v; refreshMenuState() end))
+    bindControl("AimPart", createDropdown(cbt, "Aim Part", "Choose head or chest", {"Head", "Chest", "HumanoidRootPart"}, State.AimPart, function(v) State.AimPart = v end))
+    bindControl("WallCheck", createToggle(cbt, "Wall Check", "No pegar a través de paredes", false, function(v) State.WallCheck = v end))
     createParagraph(cbt, "Aim Status", "Press the aim key once to activate and press it again to deactivate. The FOV stays visible even when the menu is hidden.")
 
-    local set = createSection(settings, "Settings", "Menu controls")
-    createKeybind(set, "Menu Hotkey", "Choose the key to hide and show the menu", State.MenuKey, function(v) State.MenuKey = v; refreshMenuState() end)
-    createButton(set, "Hide menu", "Same as pressing the hotkey", "Hide", function() State.MenuVisible = not State.MenuVisible; refreshMenuState() end)
-    createButton(set, "Minimize", "Collapse and expand the panel", "Min", function() State.Minimized = not State.Minimized; refreshMenuState() end)
-    createButton(set, "Close", "Destroy the whole UI", "Close", function()
-        for _, c in ipairs(App.Connections) do safeDisconnect(c) end
-        for target in pairs(App.ESP) do removeESPRecord(target) end
-        clearPreview()
-        if App.Gui then App.Gui:Destroy() end
+    local perfMain = createSection(perf, "Perf Engine", "Optimiza sin quitar glow ni bajar la calidad del target que sí renderiza")
+    bindControl("RenderPriority", createDropdown(perfMain, "Priority", "Orden para render y selección de aim", {"Crosshair", "Distance", "Health"}, State.RenderPriority, function(v) State.RenderPriority = v end))
+    bindControl("MaxRenderedTargets", createSlider(perfMain, "Max ESP Targets", "Cuántos objetivos completos se renderizan", 2, 30, State.MaxRenderedTargets, 1, function(v) State.MaxRenderedTargets = v end))
+    bindControl("MaxSkeletonTargets", createSlider(perfMain, "Max Skeleton Targets", "Skeleton solo para los más importantes", 0, 15, State.MaxSkeletonTargets, 1, function(v) State.MaxSkeletonTargets = v end))
+    bindControl("MaxTracerTargets", createSlider(perfMain, "Max Tracer Targets", "Líneas solo para los primeros", 0, 20, State.MaxTracerTargets, 1, function(v) State.MaxTracerTargets = v end))
+    bindControl("MaxNameTargets", createSlider(perfMain, "Max Name Targets", "Textos solo para los primeros", 0, 20, State.MaxNameTargets, 1, function(v) State.MaxNameTargets = v end))
+    bindControl("TargetRefreshRate", createSlider(perfMain, "Refresh Rate", "Cada cuánto se recalcula la lista completa", 0.03, 0.25, State.TargetRefreshRate, 0.01, function(v) State.TargetRefreshRate = v end))
+    createParagraph(perfMain, "Tip", "Se mantiene el glow, pero se limita cuántos objetivos usan skeleton, tracer y texto para que no se pegue con mucha gente.")
+
+    local perfLobby = createSection(perf, "Lobby", "Todos los jugadores del lobby ordenados por fila con su logo de Roblox")
+    createButton(perfLobby, "Return Camera", "Vuelve la cámara a tu personaje", "Self", function()
+        local hum = getHumanoid(getCharacter())
+        if hum then
+            Camera.CameraSubject = hum
+            notify("Perf", "Cámara vuelta a tu personaje.")
+        end
+    end)
+    createButton(perfLobby, "Refresh Lobby", "Actualiza las cards del lobby", "Refresh", function()
+        refreshLobbyCards()
+    end)
+    App.LobbyGrid = create("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,0), AutomaticSize=Enum.AutomaticSize.Y})
+    App.LobbyGrid.Parent = perfLobby
+    local gridLayout = create("UIGridLayout", {CellSize=UDim2.new(0,178,0,112), CellPadding=UDim2.new(0,8,0,8), SortOrder=Enum.SortOrder.LayoutOrder})
+    gridLayout.Parent = App.LobbyGrid
+
+    local set = createSection(settings, "Settings", "Hotkey y configs")
+    bindControl("MenuKey", createKeybind(set, "Menu Hotkey", "Choose the key to hide and show the menu", State.MenuKey, function(v) State.MenuKey = v; refreshMenuState() end))
+    bindControl("ConfigName", createTextbox(set, "Save Config", "Escribe el nombre antes de guardar", State.ConfigName, "default", function(v) State.ConfigName = v end))
+    bindControl("SelectedConfig", createDropdown(set, "Select Config", "Elige una config guardada", listConfigNames(), State.SelectedConfig, function(v) State.SelectedConfig = v end))
+    createButton(set, "Save Config", "Guarda la config actual en archivo json", "Save", function()
+        local saved = saveCurrentConfig(State.ConfigName)
+        if saved then
+            if App.Controls.SelectedConfig and App.Controls.SelectedConfig.SetOptions then
+                App.Controls.SelectedConfig.SetOptions(listConfigNames(), saved)
+            end
+            notify("Config", "Config guardada: " .. tostring(saved))
+        end
+    end)
+    createButton(set, "Load Config", "Carga la config seleccionada", "Load", function()
+        local loaded = loadSavedConfig(State.SelectedConfig)
+        if loaded then
+            notify("Config", "Config cargada: " .. tostring(loaded))
+        end
+    end)
+    createButton(set, "Refresh Configs", "Actualiza la lista de configs del disco", "Refresh", function()
+        if App.Controls.SelectedConfig and App.Controls.SelectedConfig.SetOptions then
+            App.Controls.SelectedConfig.SetOptions(listConfigNames(), State.SelectedConfig)
+        end
+        notify("Config", "Lista de configs actualizada.")
     end)
 end
 
@@ -1712,24 +2164,50 @@ end
 
 local function startLoop()
     local previewTick = 0
+    local targetTick = 0
+    local lobbyTick = 0
     table.insert(App.Connections, RunService.RenderStepped:Connect(function(dt)
+        targetTick += dt
+        lobbyTick += dt
+        if targetTick >= State.TargetRefreshRate then
+            targetTick = 0
+            refreshTargetCache()
+        end
         updateESP()
         updateAim()
         updateFOV()
         previewTick += dt
-        if previewTick >= 1.1 and State.CharacterPreview then
+        if previewTick >= 1.35 and State.CharacterPreview then
             previewTick = 0
             rebuildPreview()
+        end
+        if lobbyTick >= 2.5 then
+            lobbyTick = 0
+            if App.Pages and App.Pages["Perf"] and App.Pages["Perf"].Visible then
+                refreshLobbyCards()
+            end
         end
     end))
     table.insert(App.Connections, LocalPlayer.CharacterAdded:Connect(function()
         task.wait(0.8)
         rebuildPreview()
     end))
+    table.insert(App.Connections, Players.PlayerAdded:Connect(function()
+        task.wait(0.25)
+        if App.Pages and App.Pages["Perf"] and App.Pages["Perf"].Visible then refreshLobbyCards() end
+    end))
+    table.insert(App.Connections, Players.PlayerRemoving:Connect(function()
+        task.wait()
+        if App.Pages and App.Pages["Perf"] and App.Pages["Perf"].Visible then refreshLobbyCards() end
+    end))
 end
 
 buildUI()
 buildPages()
+if App.Controls.SelectedConfig and App.Controls.SelectedConfig.SetOptions then
+    App.Controls.SelectedConfig.SetOptions(listConfigNames(), State.SelectedConfig)
+end
+refreshLobbyCards()
 switchTab("Main")
 hookDrag()
 hookButtons()
@@ -1753,7 +2231,10 @@ task.delay(5, function()
         if App.Intro and App.Intro.Parent then App.Intro:Destroy() end
     end
     State.MenuVisible = true
+    refreshTargetCache()
+    refreshLobbyCards()
     refreshMenuState()
     App.Root.Visible = true
     notify("Nexhidera", "Menu loaded correctly.")
 end)
+
