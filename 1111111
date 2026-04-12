@@ -91,6 +91,7 @@ local ThemePresets = {
 
 local State = {
 	MenuVisible = true,
+	MenuMinimized = false,
 	MenuKey = Enum.KeyCode.RightShift,
 	ThemeName = "PureBlack",
 	Glow = false,
@@ -2360,9 +2361,11 @@ local function buildPages()
 	end)
 	createSlider(aimSection, "FOV Size", "Working FOV visualizer radius", 40, 400, State.AimFov, function(v)
 		State.AimFov = v
+		refreshFovState()
 	end)
 	createCheckbox(aimSection, "Show FOV", "Show or hide the circle on screen", State.AimShowFOV, function(v)
 		State.AimShowFOV = v
+		refreshFovState()
 	end)
 	createCheckbox(aimSection, "Sticky Mode", "UI placeholder checkbox only", State.AimSticky, function(v)
 		State.AimSticky = v
@@ -2417,37 +2420,58 @@ local function buildFovCircle()
 	App.FovCircle.UIStroke = stroke
 end
 
+
+local function refreshMenuState()
+	if not App or not App.Root then
+		return
+	end
+
+	App.Root.Visible = State.MenuVisible
+
+	if App.Sidebar and App.Content then
+		App.Sidebar.Visible = not State.MenuMinimized
+		App.Content.Visible = not State.MenuMinimized
+	end
+
+	if State.MenuMinimized then
+		App.Root.Size = UDim2.new(0, 1000, 0, 74)
+	else
+		App.Root.Size = UDim2.new(0, 1000, 0, 640)
+	end
+
+	if State.Blur then
+		setBlur(State.MenuVisible)
+	end
+end
+
+local function refreshFovState()
+	if not App or not App.FovCircle then
+		return
+	end
+	local size = math.max(40, tonumber(State.AimFov) or 140) * 2
+	App.FovCircle.Size = UDim2.new(0, size, 0, size)
+	App.FovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+	App.FovCircle.Visible = State.AimShowFOV and true or false
+end
+
 local function hookEvents()
 	App.SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
 		State.Search = App.SearchBox.Text or ""
 		refreshSearch()
 	end)
 
-	local minimized = false
 	local dragActive = false
 	local dragStart = nil
 	local startPos = nil
 
 	App.MinButton.MouseButton1Click:Connect(function()
-		minimized = not minimized
-		App.Sidebar.Visible = not minimized
-		App.Content.Visible = not minimized
-		if minimized then
-			App.Root.Size = UDim2.new(0, 1000, 0, 74)
-		else
-			App.Root.Size = UDim2.new(0, 1000, 0, 640)
-		end
+		State.MenuMinimized = not State.MenuMinimized
+		refreshMenuState()
 	end)
 
 	App.HideButton.MouseButton1Click:Connect(function()
 		State.MenuVisible = not State.MenuVisible
-		App.Root.Visible = State.MenuVisible
-		if App.FovCircle then
-			App.FovCircle.Visible = State.AimShowFOV
-		end
-		if State.Blur then
-			setBlur(State.MenuVisible)
-		end
+		refreshMenuState()
 	end)
 
 	App.CloseButton.MouseButton1Click:Connect(function()
@@ -2456,9 +2480,12 @@ local function hookEvents()
 			App.BlurObject:Destroy()
 			App.BlurObject = nil
 		end
-		App.Gui:Destroy()
+		if App.Gui then
+			App.Gui:Destroy()
+		end
 	end)
 
+	App.Header.Active = true
 	App.Header.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragActive = true
@@ -2473,9 +2500,20 @@ local function hookEvents()
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
-		if dragActive and input.UserInputType == Enum.UserInputType.MouseMovement then
+		if dragActive and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and startPos then
 			local delta = input.Position - dragStart
-			App.Root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			App.Root.Position = UDim2.new(
+				startPos.X.Scale,
+				startPos.X.Offset + delta.X,
+				startPos.Y.Scale,
+				startPos.Y.Offset + delta.Y
+			)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragActive = false
 		end
 	end)
 
@@ -2483,12 +2521,10 @@ local function hookEvents()
 		if gp then
 			return
 		end
+
 		if input.KeyCode == State.MenuKey then
 			State.MenuVisible = not State.MenuVisible
-			App.Root.Visible = State.MenuVisible
-			if State.Blur then
-				setBlur(State.MenuVisible)
-			end
+			refreshMenuState()
 		end
 	end)
 
@@ -2500,6 +2536,9 @@ local function hookEvents()
 			hum.JumpPower = State.LocalJumpPower
 		end
 	end)
+
+	refreshMenuState()
+	refreshFovState()
 end
 
 local function updateSelfMarker()
@@ -2520,12 +2559,7 @@ local function loop()
 	local accum = 0
 	RunService.RenderStepped:Connect(function(dt)
 		accum = accum + dt
-		if App.FovCircle then
-			local size = State.AimFov * 2
-			App.FovCircle.Size = UDim2.new(0, size, 0, size)
-			App.FovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-			App.FovCircle.Visible = State.AimShowFOV
-		end
+		refreshFovState()
 		if accum >= State.RefreshRate then
 			accum = 0
 			updateVisualRecords()
@@ -2543,6 +2577,8 @@ applyTheme(State.ThemeName)
 switchTab("Home")
 setGlowVisible(State.Glow)
 setBlur(State.Blur)
+refreshMenuState()
+refreshFovState()
 loop()
 notify("Loaded", "Premium admin/debug panel loaded correctly.")
 
