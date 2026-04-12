@@ -2563,3 +2563,594 @@ function Library:CreateWindow(options)
 end
 
 return Library
+
+--[[ FULL ALL OPTIONS MENU ]]-
+local Window = Library:CreateWindow({
+    Title = "Tony Montana Hub",
+    Subtitle = "All Options Showcase",
+    Version = "v3.1.0",
+    Theme = "Dark",
+    ToggleKey = Enum.KeyCode.RightShift,
+    Preview = true,
+    Blur = true,
+    ConfigFolder = "TonyMontana_AllOptions"
+})
+
+local state = {
+    Theme = "Dark",
+    Accent = Color3.fromRGB(170, 85, 255),
+    WidgetDropdown = nil,
+    ConfigDropdown = nil,
+}
+
+local function notify(title, text, kind, duration)
+    Window:Notify({
+        Title = title,
+        Text = text,
+        Type = kind or "Info",
+        Duration = duration or 3
+    })
+end
+
+local function refreshConfigDropdown()
+    if state.ConfigDropdown then
+        local configs = Window:GetConfigs()
+        if #configs == 0 then
+            configs = {"default"}
+        end
+        state.ConfigDropdown:Refresh(configs)
+    end
+end
+
+local Main = Window:CreateTab({
+    Name = "Main",
+    Icon = "⌂",
+    Description = "Overview, quick actions and welcome widgets"
+})
+
+local Player = Window:CreateTab({
+    Name = "Player",
+    Icon = "☻",
+    Description = "Player card, movement style and local preferences"
+})
+
+local Visuals = Window:CreateTab({
+    Name = "Visuals",
+    Icon = "◈",
+    Description = "Theme, accent colors, widgets and presentation"
+})
+
+local Utility = Window:CreateTab({
+    Name = "Utility",
+    Icon = "✦",
+    Description = "Generic tools, logs, input tests and automation toggles"
+})
+
+local Settings = Window:CreateTab({
+    Name = "Settings",
+    Icon = "⚙",
+    Description = "Configs, binds, theme presets and window behavior"
+})
+
+-- MAIN TAB
+local Welcome = Main:CreateSection({
+    Name = "Welcome",
+    Description = "General information and test actions"
+})
+
+Welcome:AddParagraph("Tony Montana Hub", "This menu now includes all control types available in the library: divider, label, paragraph, button, toggle, slider, textbox, keybind, dropdown, multi dropdown and color picker.")
+Welcome:AddLabel("Use RightShift to hide or show the menu.")
+Welcome:AddDivider("Quick Actions")
+Welcome:AddButton({
+    Name = "Loaded Notification",
+    Callback = function()
+        notify("Main", "The full all-options menu is working correctly.", "Success")
+    end
+})
+Welcome:AddButton({
+    Name = "Window Info",
+    Callback = function()
+        local configs = Window:GetConfigs()
+        notify("Stats", "Loaded tabs: 5 | Saved configs: " .. tostring(#configs), "Info")
+    end
+})
+Welcome:AddToggle({
+    Name = "Enable Welcome Toast",
+    Description = "Shows a startup style notification",
+    Flag = "WelcomeToast",
+    Default = true,
+    Callback = function(stateValue)
+        notify("Toggle", "Welcome Toast: " .. (stateValue and "Enabled" or "Disabled"), stateValue and "Success" or "Warning", 2)
+    end
+})
+Welcome:AddSlider({
+    Name = "Interface Scale",
+    Description = "Demo slider for UI scaling value",
+    Flag = "InterfaceScale",
+    Min = 75,
+    Max = 150,
+    Default = 100,
+    Suffix = "%",
+    Callback = function(value)
+        if value % 5 == 0 then
+            notify("Scale", "Interface scale value set to " .. tostring(value) .. "%", "Info", 1.5)
+        end
+    end
+})
+Welcome:AddTextbox({
+    Name = "Session Name",
+    Description = "Rename the current session label",
+    Flag = "SessionName",
+    Default = "Default Session",
+    Placeholder = "Write a custom session name...",
+    Callback = function(text)
+        if text ~= "" then
+            notify("Session", "Session renamed to: " .. text, "Success", 1.5)
+        end
+    end
+})
+
+local Widgets = Main:CreateSection({
+    Name = "Widgets",
+    Description = "Example dropdowns and multi selections"
+})
+
+Widgets:AddDropdown({
+    Name = "Main Widget",
+    Description = "Choose the primary widget",
+    Flag = "MainWidget",
+    Values = {"Overview", "Stats", "Status", "Activity", "Profile"},
+    Default = "Overview",
+    Callback = function(value)
+        notify("Widget", "Primary widget set to " .. tostring(value), "Info", 1.5)
+    end
+})
+
+state.WidgetDropdown = Widgets:AddMultiDropdown({
+    Name = "Active Widgets",
+    Description = "Select multiple active widgets",
+    Flag = "ActiveWidgets",
+    Values = {"FPS", "Ping", "Clock", "Account Age", "Status", "Preview", "Footer"},
+    Default = { ["Clock"] = true, ["Preview"] = true, ["Footer"] = true },
+    Callback = function(values)
+        local total = 0
+        for _, enabled in pairs(values) do
+            if enabled then
+                total += 1
+            end
+        end
+        notify("Widgets", tostring(total) .. " widget(s) selected.", "Info", 1.5)
+    end
+})
+
+Widgets:AddButton({
+    Name = "Enable All Widgets",
+    Callback = function()
+        state.WidgetDropdown:Set({
+            ["FPS"] = true,
+            ["Ping"] = true,
+            ["Clock"] = true,
+            ["Account Age"] = true,
+            ["Status"] = true,
+            ["Preview"] = true,
+            ["Footer"] = true,
+        })
+        notify("Widgets", "All widgets enabled.", "Success")
+    end
+})
+
+-- PLAYER TAB
+local Identity = Player:CreateSection({
+    Name = "Identity",
+    Description = "Player card related inputs"
+})
+
+Identity:AddTextbox({
+    Name = "Display Title",
+    Description = "Custom label for your local card",
+    Flag = "DisplayTitle",
+    Default = "Premium User",
+    Placeholder = "Enter display title...",
+    Callback = function(text)
+        notify("Identity", "Title updated to: " .. (text == "" and "None" or text), "Info", 1.5)
+    end
+})
+Identity:AddTextbox({
+    Name = "Status Message",
+    Description = "Custom presence text",
+    Flag = "StatusMessage",
+    Default = "Ready",
+    Placeholder = "Enter status...",
+    Callback = function(text)
+        notify("Identity", "Status: " .. (text == "" and "empty" or text), "Info", 1.5)
+    end
+})
+Identity:AddToggle({
+    Name = "Show Online Badge",
+    Description = "Display player presence badge",
+    Flag = "ShowOnlineBadge",
+    Default = true,
+    Callback = function(stateValue)
+        notify("Identity", "Online badge " .. (stateValue and "shown" or "hidden"), stateValue and "Success" or "Warning", 1.5)
+    end
+})
+Identity:AddDropdown({
+    Name = "Profile Layout",
+    Description = "Change how the profile card is organized",
+    Flag = "ProfileLayout",
+    Values = {"Compact", "Default", "Wide", "Card Stack"},
+    Default = "Default",
+    Callback = function(value)
+        notify("Profile", "Layout: " .. tostring(value), "Info", 1.5)
+    end
+})
+
+local LocalSettings = Player:CreateSection({
+    Name = "Local Preferences",
+    Description = "Non-destructive personal settings"
+})
+
+LocalSettings:AddSlider({
+    Name = "Walkspeed Value",
+    Description = "Demo numeric local setting",
+    Flag = "WalkspeedValue",
+    Min = 8,
+    Max = 32,
+    Default = 16,
+    Callback = function(value)
+        if value == 16 then return end
+        notify("Player", "Walkspeed demo value changed to " .. tostring(value), "Info", 1)
+    end
+})
+LocalSettings:AddSlider({
+    Name = "Jump Value",
+    Description = "Demo numeric local setting",
+    Flag = "JumpValue",
+    Min = 30,
+    Max = 100,
+    Default = 50,
+    Callback = function(value)
+        if value % 10 == 0 then
+            notify("Player", "Jump demo value changed to " .. tostring(value), "Info", 1)
+        end
+    end
+})
+LocalSettings:AddMultiDropdown({
+    Name = "Active Local Modes",
+    Description = "Enable presentation-only local modes",
+    Flag = "LocalModes",
+    Values = {"Compact Card", "Large Header", "Preview Spin", "Footer Stats", "Extra Tips"},
+    Default = { ["Preview Spin"] = true, ["Footer Stats"] = true },
+    Callback = function() end
+})
+LocalSettings:AddButton({
+    Name = "Reset Local Preferences",
+    Callback = function()
+        Library.Flags["WalkspeedValue"] = 16
+        Library.Flags["JumpValue"] = 50
+        notify("Player", "Local preference flags were reset to demo defaults.", "Success")
+    end
+})
+
+-- VISUALS TAB
+local ThemeSection = Visuals:CreateSection({
+    Name = "Theme",
+    Description = "Preset themes and accent controls"
+})
+
+ThemeSection:AddDropdown({
+    Name = "Theme Preset",
+    Description = "Switch between built-in presets",
+    Flag = "ThemePreset",
+    Values = {"Dark", "Red", "PureBlack"},
+    Default = "Dark",
+    Callback = function(value)
+        state.Theme = value
+        Window:SetTheme(value)
+        notify("Theme", "Preset changed to " .. tostring(value) .. ".", "Success")
+    end
+})
+
+ThemeSection:AddColorPicker({
+    Name = "Accent Color",
+    Description = "Change the accent preview and glow color",
+    Flag = "AccentColor",
+    Default = Color3.fromRGB(170, 85, 255),
+    Callback = function(color)
+        state.Accent = color
+        Window:SetAccent(color)
+    end
+})
+
+ThemeSection:AddToggle({
+    Name = "Enable Glow Style",
+    Description = "Visual demo toggle",
+    Flag = "EnableGlowStyle",
+    Default = true,
+    Callback = function(stateValue)
+        notify("Visuals", "Glow style " .. (stateValue and "enabled" or "disabled"), stateValue and "Success" or "Warning", 1.5)
+    end
+})
+
+ThemeSection:AddDropdown({
+    Name = "Corner Style",
+    Description = "Choose a style name for rounded corners",
+    Flag = "CornerStyle",
+    Values = {"Soft", "Rounded", "Sharp", "Hybrid"},
+    Default = "Rounded",
+    Callback = function() end
+})
+
+local Appearance = Visuals:CreateSection({
+    Name = "Appearance",
+    Description = "Extra visual toggles and numeric settings"
+})
+
+Appearance:AddSlider({
+    Name = "Blur Strength",
+    Description = "Demo blur amount value",
+    Flag = "BlurStrength",
+    Min = 0,
+    Max = 25,
+    Default = 8,
+    Callback = function(value)
+        if Window.Blur then
+            Window.Blur.Size = value
+            if value <= 0 then
+                Window.Blur.Enabled = false
+            else
+                Window.Blur.Enabled = true
+            end
+        end
+    end
+})
+Appearance:AddSlider({
+    Name = "Preview Rotation Speed",
+    Description = "Display-only rotation value",
+    Flag = "PreviewRotationSpeed",
+    Min = 0,
+    Max = 100,
+    Default = 20,
+    Suffix = " deg",
+    Callback = function() end
+})
+Appearance:AddMultiDropdown({
+    Name = "Visible Panels",
+    Description = "Choose what sections look active",
+    Flag = "VisiblePanels",
+    Values = {"Sidebar", "Preview", "Footer", "Header", "Notifications"},
+    Default = {
+        ["Sidebar"] = true,
+        ["Preview"] = true,
+        ["Footer"] = true,
+        ["Header"] = true,
+        ["Notifications"] = true,
+    },
+    Callback = function() end
+})
+Appearance:AddButton({
+    Name = "Apply Dark Preset",
+    Callback = function()
+        Window:SetTheme("Dark")
+        Window:SetAccent(Color3.fromRGB(170, 85, 255))
+        notify("Visuals", "Dark preset reapplied.", "Success")
+    end
+})
+Appearance:AddButton({
+    Name = "Apply Red Preset",
+    Callback = function()
+        Window:SetTheme("Red")
+        Window:SetAccent(Color3.fromRGB(185, 72, 72))
+        notify("Visuals", "Red preset applied.", "Success")
+    end
+})
+
+-- UTILITY TAB
+local Logs = Utility:CreateSection({
+    Name = "Notifications",
+    Description = "Test every notification type"
+})
+
+Logs:AddButton({
+    Name = "Info Notification",
+    Callback = function()
+        notify("Info", "This is an information notification.", "Info")
+    end
+})
+Logs:AddButton({
+    Name = "Success Notification",
+    Callback = function()
+        notify("Success", "Everything is working fine.", "Success")
+    end
+})
+Logs:AddButton({
+    Name = "Warning Notification",
+    Callback = function()
+        notify("Warning", "This is only a warning example.", "Warning")
+    end
+})
+Logs:AddButton({
+    Name = "Error Notification",
+    Callback = function()
+        notify("Error", "This is an error example.", "Error")
+    end
+})
+Logs:AddTextbox({
+    Name = "Custom Notification Text",
+    Description = "Write a custom message and press the send button below",
+    Flag = "CustomNotifyText",
+    Default = "Hello from Tony Montana Hub",
+    Placeholder = "Enter notification text..."
+})
+Logs:AddButton({
+    Name = "Send Custom Notification",
+    Callback = function()
+        notify("Custom", tostring(Library.Flags["CustomNotifyText"] or "Empty"), "Info")
+    end
+})
+
+local InputSection = Utility:CreateSection({
+    Name = "Inputs",
+    Description = "Test binds, selectors and text based controls"
+})
+
+InputSection:AddKeybind({
+    Name = "Quick Notify Key",
+    Description = "Press the selected key to show a quick notification",
+    Flag = "QuickNotifyKey",
+    Default = Enum.KeyCode.K,
+    PressCallback = function()
+        notify("Bind", "Quick notify key pressed.", "Success", 1.2)
+    end,
+    Callback = function(key)
+        notify("Bind", "Quick notify key changed to " .. key.Name, "Info", 1.5)
+    end
+})
+
+InputSection:AddDropdown({
+    Name = "Input Mode",
+    Description = "Select how text inputs should feel",
+    Flag = "InputMode",
+    Values = {"Default", "Immediate", "FocusLost", "Hybrid"},
+    Default = "FocusLost",
+    Callback = function() end
+})
+
+InputSection:AddMultiDropdown({
+    Name = "Enabled Tools",
+    Description = "Generic tool selector",
+    Flag = "EnabledTools",
+    Values = {"Logger", "Console", "Preview Sync", "Auto Save", "Hints", "Status Toast"},
+    Default = { ["Logger"] = true, ["Hints"] = true },
+    Callback = function() end
+})
+
+InputSection:AddToggle({
+    Name = "Auto Hints",
+    Description = "Show reminder style hints while testing",
+    Flag = "AutoHints",
+    Default = true,
+    Callback = function(stateValue)
+        notify("Hints", stateValue and "Hints enabled." or "Hints disabled.", stateValue and "Success" or "Warning", 1.2)
+    end
+})
+
+-- SETTINGS TAB
+local Configs = Settings:CreateSection({
+    Name = "Configs",
+    Description = "Save and load your current demo values"
+})
+
+Configs:AddTextbox({
+    Name = "Config Name",
+    Description = "Name used when saving or loading",
+    Flag = "ConfigName",
+    Default = "default",
+    Placeholder = "Enter config name..."
+})
+
+state.ConfigDropdown = Configs:AddDropdown({
+    Name = "Available Configs",
+    Description = "Refresh after saving if needed",
+    Flag = "AvailableConfigs",
+    Values = {"default"},
+    Default = "default",
+    Callback = function() end
+})
+
+Configs:AddButton({
+    Name = "Refresh Config List",
+    Callback = function()
+        refreshConfigDropdown()
+        notify("Configs", "Config list refreshed.", "Info")
+    end
+})
+
+Configs:AddButton({
+    Name = "Save Config",
+    Callback = function()
+        local name = tostring(Library.Flags["ConfigName"] or "default")
+        Window:SaveConfig(name)
+        task.wait(0.1)
+        refreshConfigDropdown()
+    end
+})
+
+Configs:AddButton({
+    Name = "Load Config",
+    Callback = function()
+        local chosen = Library.Flags["AvailableConfigs"] or Library.Flags["ConfigName"] or "default"
+        Window:LoadConfig(tostring(chosen))
+    end
+})
+
+local WindowSection = Settings:CreateSection({
+    Name = "Window",
+    Description = "Window visibility, binds and interface state"
+})
+
+WindowSection:AddKeybind({
+    Name = "Toggle Window Key",
+    Description = "Changes the main show or hide key",
+    Flag = "WindowToggleKey",
+    Default = Enum.KeyCode.RightShift,
+    Callback = function(key)
+        Window:SetToggleKey(key)
+        notify("Window", "Toggle key changed to " .. key.Name, "Success", 1.5)
+    end
+})
+
+WindowSection:AddToggle({
+    Name = "Start Minimized",
+    Description = "Demo preference only",
+    Flag = "StartMinimized",
+    Default = false,
+    Callback = function(stateValue)
+        notify("Window", "Start minimized set to " .. tostring(stateValue), "Info", 1.2)
+    end
+})
+
+WindowSection:AddButton({
+    Name = "Minimize Window",
+    Callback = function()
+        Window:SetMinimized(true)
+    end
+})
+
+WindowSection:AddButton({
+    Name = "Restore Window",
+    Callback = function()
+        Window:SetMinimized(false)
+    end
+})
+
+WindowSection:AddButton({
+    Name = "Hide Window",
+    Callback = function()
+        Window:SetVisible(false)
+        task.delay(1.5, function()
+            notify("Hint", "Use your toggle key to reopen the menu.", "Warning", 3)
+        end)
+    end
+})
+
+local Credits = Settings:CreateSection({
+    Name = "Credits",
+    Description = "Extra labels, paragraphs and dividers"
+})
+
+Credits:AddLabel("This file is a full showcase of every built-in control currently present in the library.")
+Credits:AddDivider("Notes")
+Credits:AddParagraph("What is included?", "Tabs, sections, buttons, toggles, sliders, textboxes, keybinds, dropdowns, multi dropdowns, color pickers, notifications, config actions, search and preview.")
+Credits:AddParagraph("Tip", "If you save a config, refresh the config list to see it inside the dropdown immediately.")
+Credits:AddButton({
+    Name = "Final Test Notification",
+    Callback = function()
+        notify("Tony Montana Hub", "All options are now loaded into the showcase menu.", "Success")
+    end
+})
+
+refreshConfigDropdown()
+Main:Show()
+notify("Tony Montana Hub", "Full all-options menu loaded.", "Success", 2.5)
+
