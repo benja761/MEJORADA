@@ -67,8 +67,8 @@ local State = {
     ESPNameSize = 13,
     ESPGlow = false,
     CharacterPreview = false,
-    ESPFluid = true,
-    ESPFluidness = 0.34,
+    ESPFluid = false,
+    ESPFluidness = 0.18,
     DynamicQuality = true,
     OnlyScreenTargets = true,
     NameDistance = 260,
@@ -259,8 +259,8 @@ end
 
 local function applyVisualPreset(mode)
     if mode == "Low" then
-        setControlValue("ESPFluid", true)
-        setControlValue("ESPFluidness", 0.28)
+        setControlValue("ESPFluid", false)
+        setControlValue("ESPFluidness", 0.18)
         setControlValue("DynamicQuality", true)
         setControlValue("OnlyScreenTargets", true)
         setControlValue("MaxRenderedTargets", 7)
@@ -274,8 +274,8 @@ local function applyVisualPreset(mode)
         setControlValue("HealthDistance", 260)
         setControlValue("NameDistance", 180)
     elseif mode == "Quality" then
-        setControlValue("ESPFluid", true)
-        setControlValue("ESPFluidness", 0.42)
+        setControlValue("ESPFluid", false)
+        setControlValue("ESPFluidness", 0.18)
         setControlValue("DynamicQuality", false)
         setControlValue("OnlyScreenTargets", true)
         setControlValue("MaxRenderedTargets", 14)
@@ -289,8 +289,8 @@ local function applyVisualPreset(mode)
         setControlValue("HealthDistance", 420)
         setControlValue("NameDistance", 280)
     else
-        setControlValue("ESPFluid", true)
-        setControlValue("ESPFluidness", 0.34)
+        setControlValue("ESPFluid", false)
+        setControlValue("ESPFluidness", 0.18)
         setControlValue("DynamicQuality", true)
         setControlValue("OnlyScreenTargets", true)
         setControlValue("MaxRenderedTargets", 10)
@@ -1846,27 +1846,22 @@ local function updateESP()
                     local c = State.ESPColor
 
                     if State.ESPFluid then
-                        local alpha = math.clamp(tonumber(State.ESPFluidness) or 0.34, 0.08, 0.9)
+                        local alpha = math.clamp(tonumber(State.ESPFluidness) or 0.18, 0.08, 0.35)
                         local s = rec.SmoothState
                         if not s then
-                            s = {x = boxX, y = boxY, w = boxW, h = boxH, hx = headPoint.X, hy = headPoint.Y, rx = rootPoint.X, ry = rootPoint.Y}
+                            s = {w = boxW, h = boxH}
                             rec.SmoothState = s
                         else
-                            s.x = s.x + ((boxX - s.x) * alpha)
-                            s.y = s.y + ((boxY - s.y) * alpha)
                             s.w = s.w + ((boxW - s.w) * alpha)
                             s.h = s.h + ((boxH - s.h) * alpha)
-                            s.hx = s.hx + ((headPoint.X - s.hx) * alpha)
-                            s.hy = s.hy + ((headPoint.Y - s.hy) * alpha)
-                            s.rx = s.rx + ((rootPoint.X - s.rx) * alpha)
-                            s.ry = s.ry + ((rootPoint.Y - s.ry) * alpha)
                         end
-                        boxX, boxY, boxW, boxH = s.x, s.y, s.w, s.h
-                        headPoint = Vector2.new(s.hx, s.hy)
-                        rootPoint = Vector2.new(s.rx, s.ry)
+                        boxW, boxH = s.w, s.h
                     else
                         rec.SmoothState = nil
                     end
+
+                    boxX = rootPoint.X - (boxW * 0.5)
+                    boxY = headPoint.Y - (boxH * 0.16)
 
                     local glowDistance = State.GlowDistance
                     local nameDistance = State.NameDistance
@@ -2308,42 +2303,7 @@ local function buildPages()
     local perf = makePage("Perf")
     local settings = makePage("Settings")
 
-    local profile = createSection(main, "Profile", "Your Roblox info inside the main tab")
-    local accountCard = controlHolder(profile, 108)
-    local avatar = create("ImageLabel", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,12,0,12), Size=UDim2.new(0,78,0,78), Image=""})
-    avatar.Parent = accountCard
-    registerTheme(avatar, "BackgroundColor3", "Main")
-    addCorner(avatar, 18)
-    addStroke(avatar)
-    task.spawn(function()
-        local ok, image = pcall(function()
-            return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.AvatarThumbnail, Enum.ThumbnailSize.Size420x420)
-        end)
-        if ok and avatar.Parent then
-            avatar.Image = image
-        end
-    end)
-    local profileName = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,14), Size=UDim2.new(1,-114,0,18), Text=LocalPlayer.DisplayName, Font=Enum.Font.GothamBold, TextSize=15, TextXAlignment=Enum.TextXAlignment.Left})
-    profileName.Parent = accountCard
-    registerTheme(profileName, "TextColor3", "Text")
-    local profileUser = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,34), Size=UDim2.new(1,-114,0,16), Text='@' .. LocalPlayer.Name, Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
-    profileUser.Parent = accountCard
-    registerTheme(profileUser, "TextColor3", "Sub")
-    local profileInfo = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,54), Size=UDim2.new(1,-114,0,16), Text='Days: ' .. tostring(LocalPlayer.AccountAge) .. '  |  UserId: ' .. tostring(LocalPlayer.UserId), Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
-    profileInfo.Parent = accountCard
-    registerTheme(profileInfo, "TextColor3", "Sub")
-    local profileNote = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,72), Size=UDim2.new(1,-114,0,16), Text='Avatar preview + live character window on the right.', Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
-    profileNote.Parent = accountCard
-    registerTheme(profileNote, "TextColor3", "Sub")
-    createParagraph(profile, "Player", "DisplayName: " .. LocalPlayer.DisplayName .. "   |   Username: @" .. LocalPlayer.Name)
-    createParagraph(profile, "Account", "AccountAge: " .. tostring(LocalPlayer.AccountAge) .. " days   |   UserId: " .. tostring(LocalPlayer.UserId))
-    createParagraph(profile, "Menu", "Movible, minimizable, closable, hotkey hide, preview window, color menu and glow title enabled.")
-    createButton(profile, "Refresh preview", "Rebuild the character window at the right side", "Refresh", function()
-        rebuildPreview()
-        notify("Preview", "Character preview refreshed.")
-    end)
-
-    local homeTools = createSection(main, "Home Tools", "Quick presets and live info")
+    local homeTools = createSection(main, "Overview / Presets", "Presets rápidos, estado en vivo y mejoras del render")
     createButton(homeTools, "Preset Low", "Menos carga para lobbys llenos", "Low", function()
         applyVisualPreset("Low")
         notify("Preset", "Modo Low aplicado.")
@@ -2397,9 +2357,75 @@ local function buildPages()
         rebuildPreview()
         refreshMenuState()
     end))
-    local visFlow = createSection(visual, "Fluidez", "Controles para que las ESP se vean más suaves")
-    bindControl("ESPFluid", createToggle(visFlow, "Fluid ESP", "Suaviza el movimiento de box, names y líneas", State.ESPFluid, function(v) State.ESPFluid = v end))
-    bindControl("ESPFluidness", createSlider(visFlow, "Fluid Strength", "Más alto = más suave", 0.08, 0.85, State.ESPFluidness, 0.01, function(v) State.ESPFluidness = v end))
+    local visFlow = createSection(visual, "Pegado / Suavizado", "Ahora las ESP van pegadas al cuerpo. Si activas esto, solo suaviza un poco el tamaño")
+    bindControl("ESPFluid", createToggle(visFlow, "Soft Follow", "Suaviza un poco el tamaño del box, pero sin retrasar la posición sobre el enemigo", State.ESPFluid, function(v) State.ESPFluid = v end))
+    bindControl("ESPFluidness", createSlider(visFlow, "Soft Strength", "Más alto = más suavizado del tamaño", 0.08, 0.85, State.ESPFluidness, 0.01, function(v) State.ESPFluidness = v end))
+    createParagraph(visFlow, "Mejorado", "Las ESP ya no retrasan su posición al girar la cámara. Ahora el seguimiento es instantáneo y el suavizado solo toca el tamaño si tú lo activas.")
+
+    local perfMain = createSection(visual, "Render / Limits", "Toda la configuración de ESP quedó aquí para que no tengas que ir a Perf")
+    bindControl("RenderPriority", createDropdown(perfMain, "Priority", "Orden para render y selección de aim", {"Crosshair", "Distance", "Health"}, State.RenderPriority, function(v) State.RenderPriority = v end))
+    bindControl("MaxRenderedTargets", createSlider(perfMain, "Max ESP Targets", "Cuántos objetivos completos se renderizan", 2, 30, State.MaxRenderedTargets, 1, function(v) State.MaxRenderedTargets = v end))
+    bindControl("MaxSkeletonTargets", createSlider(perfMain, "Max Skeleton Targets", "Skeleton solo para los más importantes", 0, 15, State.MaxSkeletonTargets, 1, function(v) State.MaxSkeletonTargets = v end))
+    bindControl("MaxTracerTargets", createSlider(perfMain, "Max Tracer Targets", "Líneas solo para los primeros", 0, 20, State.MaxTracerTargets, 1, function(v) State.MaxTracerTargets = v end))
+    bindControl("MaxNameTargets", createSlider(perfMain, "Max Name Targets", "Textos solo para los primeros", 0, 20, State.MaxNameTargets, 1, function(v) State.MaxNameTargets = v end))
+    bindControl("TargetRefreshRate", createSlider(perfMain, "Refresh Rate", "Cada cuánto se recalcula la lista completa", 0.03, 0.25, State.TargetRefreshRate, 0.01, function(v) State.TargetRefreshRate = v end))
+    createParagraph(perfMain, "Tip", "El glow se mantiene, pero ahora el pegado al enemigo se actualiza cada frame. Los límites de skeleton, tracer y texto siguen aquí para no matar FPS.")
+    bindControl("DynamicQuality", createToggle(perfMain, "Dynamic Quality", "Baja distancias y glow automáticamente cuando hay mucha gente", State.DynamicQuality, function(v) State.DynamicQuality = v end))
+    bindControl("OnlyScreenTargets", createToggle(perfMain, "Only On Screen", "Prioriza solo targets visibles en pantalla", State.OnlyScreenTargets, function(v) State.OnlyScreenTargets = v end))
+    bindControl("GlowDistance", createSlider(perfMain, "Glow Distance", "Hasta dónde llega el glow de ESP", 80, 600, State.GlowDistance, 10, function(v) State.GlowDistance = v end))
+    bindControl("SkeletonDistance", createSlider(perfMain, "Skeleton Distance", "Hasta dónde se permite skeleton", 80, 600, State.SkeletonDistance, 10, function(v) State.SkeletonDistance = v end))
+    bindControl("TracerDistance", createSlider(perfMain, "Tracer Distance", "Hasta dónde se permiten líneas", 80, 900, State.TracerDistance, 10, function(v) State.TracerDistance = v end))
+    bindControl("HealthDistance", createSlider(perfMain, "Health Distance", "Hasta dónde se ve la barra de vida", 80, 900, State.HealthDistance, 10, function(v) State.HealthDistance = v end))
+    bindControl("NameDistance", createSlider(perfMain, "Name Distance", "Hasta dónde se ven los nombres", 80, 700, State.NameDistance, 10, function(v) State.NameDistance = v end))
+    createButton(perfMain, "Preset Low", "Aplicar preset liviano", "Low", function()
+        applyVisualPreset("Low")
+        notify("Perf", "Preset Low aplicado.")
+    end)
+    createButton(perfMain, "Preset Balanced", "Aplicar preset equilibrado", "Balanced", function()
+        applyVisualPreset("Balanced")
+        notify("Perf", "Preset Balanced aplicado.")
+    end)
+    createButton(perfMain, "Preset Quality", "Aplicar preset de calidad", "Quality", function()
+        applyVisualPreset("Quality")
+        notify("Perf", "Preset Quality aplicado.")
+    end)
+
+    local profile = createSection(perf, "Profile", "Tu perfil de Roblox y tu avatar en el tab Perf")
+    local accountCard = controlHolder(profile, 108)
+    local avatar = create("ImageLabel", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,12,0,12), Size=UDim2.new(0,78,0,78), Image=""})
+    avatar.Parent = accountCard
+    registerTheme(avatar, "BackgroundColor3", "Main")
+    addCorner(avatar, 18)
+    addStroke(avatar)
+    task.spawn(function()
+        local ok, image = pcall(function()
+            return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.AvatarThumbnail, Enum.ThumbnailSize.Size420x420)
+        end)
+        if ok and avatar.Parent then
+            avatar.Image = image
+        end
+    end)
+    local profileName = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,14), Size=UDim2.new(1,-114,0,18), Text=LocalPlayer.DisplayName, Font=Enum.Font.GothamBold, TextSize=15, TextXAlignment=Enum.TextXAlignment.Left})
+    profileName.Parent = accountCard
+    registerTheme(profileName, "TextColor3", "Text")
+    local profileUser = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,34), Size=UDim2.new(1,-114,0,16), Text='@' .. LocalPlayer.Name, Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
+    profileUser.Parent = accountCard
+    registerTheme(profileUser, "TextColor3", "Sub")
+    local profileInfo = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,54), Size=UDim2.new(1,-114,0,16), Text='Days: ' .. tostring(LocalPlayer.AccountAge) .. '  |  UserId: ' .. tostring(LocalPlayer.UserId), Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    profileInfo.Parent = accountCard
+    registerTheme(profileInfo, "TextColor3", "Sub")
+    local profileNote = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,72), Size=UDim2.new(1,-114,0,16), Text='Avatar preview + live character window on the right.', Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+    profileNote.Parent = accountCard
+    registerTheme(profileNote, "TextColor3", "Sub")
+    createParagraph(profile, "Player", "DisplayName: " .. LocalPlayer.DisplayName .. "   |   Username: @" .. LocalPlayer.Name)
+    createParagraph(profile, "Account", "AccountAge: " .. tostring(LocalPlayer.AccountAge) .. " days   |   UserId: " .. tostring(LocalPlayer.UserId))
+    createParagraph(profile, "Menu", "Movible, minimizable, closable, hotkey hide, preview window, color menu and glow title enabled.")
+    createButton(profile, "Refresh preview", "Rebuild the character window at the right side", "Refresh", function()
+        rebuildPreview()
+        notify("Preview", "Character preview refreshed.")
+    end)
+
+
 
     local cbt = createSection(combat, "Combat / Aim", "All options start disabled")
     bindControl("CombatEnabled", createToggle(cbt, "Enable Combat Page", "Master toggle for this tab", false, function(v)
@@ -2437,34 +2463,6 @@ local function buildPages()
     end))
     bindControl("WallCheck", createToggle(cbt, "Wall Check", "No pegar a través de paredes", false, function(v) State.WallCheck = v end))
     createParagraph(cbt, "Aim Status", "Toggle mode stays on until you press the key again. Hold mode only aims while the key is pressed. The FOV stays visible even when the menu is hidden.")
-
-    local perfMain = createSection(perf, "Perf Engine", "Optimiza sin quitar glow ni bajar la calidad del target que sí renderiza")
-    bindControl("RenderPriority", createDropdown(perfMain, "Priority", "Orden para render y selección de aim", {"Crosshair", "Distance", "Health"}, State.RenderPriority, function(v) State.RenderPriority = v end))
-    bindControl("MaxRenderedTargets", createSlider(perfMain, "Max ESP Targets", "Cuántos objetivos completos se renderizan", 2, 30, State.MaxRenderedTargets, 1, function(v) State.MaxRenderedTargets = v end))
-    bindControl("MaxSkeletonTargets", createSlider(perfMain, "Max Skeleton Targets", "Skeleton solo para los más importantes", 0, 15, State.MaxSkeletonTargets, 1, function(v) State.MaxSkeletonTargets = v end))
-    bindControl("MaxTracerTargets", createSlider(perfMain, "Max Tracer Targets", "Líneas solo para los primeros", 0, 20, State.MaxTracerTargets, 1, function(v) State.MaxTracerTargets = v end))
-    bindControl("MaxNameTargets", createSlider(perfMain, "Max Name Targets", "Textos solo para los primeros", 0, 20, State.MaxNameTargets, 1, function(v) State.MaxNameTargets = v end))
-    bindControl("TargetRefreshRate", createSlider(perfMain, "Refresh Rate", "Cada cuánto se recalcula la lista completa", 0.03, 0.25, State.TargetRefreshRate, 0.01, function(v) State.TargetRefreshRate = v end))
-    createParagraph(perfMain, "Tip", "Se mantiene el glow, pero se limita cuántos objetivos usan skeleton, tracer y texto para que no se pegue con mucha gente.")
-    bindControl("DynamicQuality", createToggle(perfMain, "Dynamic Quality", "Baja distancias y glow automáticamente cuando hay mucha gente", State.DynamicQuality, function(v) State.DynamicQuality = v end))
-    bindControl("OnlyScreenTargets", createToggle(perfMain, "Only On Screen", "Prioriza solo targets visibles en pantalla", State.OnlyScreenTargets, function(v) State.OnlyScreenTargets = v end))
-    bindControl("GlowDistance", createSlider(perfMain, "Glow Distance", "Hasta dónde llega el glow de ESP", 80, 600, State.GlowDistance, 10, function(v) State.GlowDistance = v end))
-    bindControl("SkeletonDistance", createSlider(perfMain, "Skeleton Distance", "Hasta dónde se permite skeleton", 80, 600, State.SkeletonDistance, 10, function(v) State.SkeletonDistance = v end))
-    bindControl("TracerDistance", createSlider(perfMain, "Tracer Distance", "Hasta dónde se permiten líneas", 80, 900, State.TracerDistance, 10, function(v) State.TracerDistance = v end))
-    bindControl("HealthDistance", createSlider(perfMain, "Health Distance", "Hasta dónde se ve la barra de vida", 80, 900, State.HealthDistance, 10, function(v) State.HealthDistance = v end))
-    bindControl("NameDistance", createSlider(perfMain, "Name Distance", "Hasta dónde se ven los nombres", 80, 700, State.NameDistance, 10, function(v) State.NameDistance = v end))
-    createButton(perfMain, "Preset Low", "Aplicar preset liviano", "Low", function()
-        applyVisualPreset("Low")
-        notify("Perf", "Preset Low aplicado.")
-    end)
-    createButton(perfMain, "Preset Balanced", "Aplicar preset equilibrado", "Balanced", function()
-        applyVisualPreset("Balanced")
-        notify("Perf", "Preset Balanced aplicado.")
-    end)
-    createButton(perfMain, "Preset Quality", "Aplicar preset de calidad", "Quality", function()
-        applyVisualPreset("Quality")
-        notify("Perf", "Preset Quality aplicado.")
-    end)
 
     local perfLobby = createSection(perf, "Lobby", "Todos los jugadores del lobby ordenados por fila con su logo de Roblox")
     createButton(perfLobby, "Return Camera", "Vuelve la cámara a tu personaje", "Self", function()
@@ -2669,9 +2667,12 @@ local function startLoop()
             end
         end
 
-        if espTick >= espInterval then
-            espTick = 0
+        if State.ESPEnabled then
             updateESP()
+        else
+            for target, rec in pairs(App.ESP) do
+                hideRecord(rec)
+            end
         end
 
         updateAim()
@@ -2746,4 +2747,3 @@ task.delay(5, function()
     App.Root.Visible = true
     notify("Nexhidera", "Menu loaded correctly.")
 end)
-
