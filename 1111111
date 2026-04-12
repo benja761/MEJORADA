@@ -92,7 +92,7 @@ local ThemePresets = {
 local State = {
 	MenuVisible = true,
 	MenuKey = Enum.KeyCode.RightShift,
-	ThemeName = "Red",
+	ThemeName = "PureBlack",
 	Glow = true,
 	Blur = false,
 	Search = "",
@@ -844,6 +844,7 @@ local function createSlider(parent, titleText, descriptionText, min, max, defaul
 end
 
 local function createDropdown(parent, titleText, descriptionText, values, defaultValue, callback)
+	values = values or {}
 	local holder = createControlHolder(parent, 46, tostring(titleText or "") .. " " .. tostring(descriptionText or ""))
 	local title = create("TextLabel", {
 		BackgroundTransparency = 1,
@@ -885,19 +886,32 @@ local function createDropdown(parent, titleText, descriptionText, values, defaul
 	addCorner(opener, 8)
 	addStroke(opener, "Outline", 1)
 
-	local listFrame = create("Frame", {
+	local arrow = create("TextLabel", {
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -8, 0.5, 0),
+		Size = UDim2.new(0, 14, 0, 14),
+		Text = "▾",
+		Font = Enum.Font.GothamBold,
+		TextSize = 12,
+		ZIndex = 52
+	})
+	arrow.Parent = opener
+	registerTheme(arrow, "TextColor3", "Accent")
+
+	local popup = create("Frame", {
 		BackgroundTransparency = 0,
 		BorderSizePixel = 0,
-		Position = UDim2.new(1, -108, 1, 4),
-		Size = UDim2.new(0, 96, 0, 0),
 		Visible = false,
 		ClipsDescendants = true,
-		ZIndex = 12
+		ZIndex = 60,
+		Size = UDim2.new(0, 116, 0, 0)
 	})
-	listFrame.Parent = holder
-	registerTheme(listFrame, "BackgroundColor3", "PanelDark")
-	addCorner(listFrame, 8)
-	addStroke(listFrame, "Outline", 1)
+	popup.Parent = App.PopupLayer or App.Gui
+	registerTheme(popup, "BackgroundColor3", "PanelDark")
+	addCorner(popup, 10)
+	addStroke(popup, "Outline", 1)
+	makeGlow(popup, "Accent")
 
 	local scroll = create("ScrollingFrame", {
 		BackgroundTransparency = 1,
@@ -906,9 +920,9 @@ local function createDropdown(parent, titleText, descriptionText, values, defaul
 		CanvasSize = UDim2.new(0, 0, 0, 0),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollBarThickness = 2,
-		ZIndex = 12
+		ZIndex = 61
 	})
-	scroll.Parent = listFrame
+	scroll.Parent = popup
 	addPadding(scroll, 6, 6, 6, 6)
 	local layout = create("UIListLayout", {
 		Padding = UDim.new(0, 6),
@@ -918,38 +932,45 @@ local function createDropdown(parent, titleText, descriptionText, values, defaul
 
 	local expanded = false
 	local state = defaultValue or (values and values[1]) or ""
-	local buttons = {}
+	local function updatePopupPosition()
+		if not opener.Parent then return end
+		local pos = opener.AbsolutePosition
+		local size = opener.AbsoluteSize
+		popup.Position = UDim2.new(0, pos.X + size.X - 116, 0, pos.Y + size.Y + 4)
+	end
 	local function setExpanded(v)
 		expanded = v and true or false
-		listFrame.Visible = expanded
-		listFrame.Size = UDim2.new(0, 96, 0, expanded and (math.min(#values, 6) * 24 + 12) or 0)
-		holder.Size = UDim2.new(1, 0, 0, expanded and (46 + math.min(#values, 6) * 24 + 16) or 46)
+		popup.Visible = expanded
+		arrow.Text = expanded and "▴" or "▾"
+		if expanded then
+			updatePopupPosition()
+		end
+		popup.Size = UDim2.new(0, 116, 0, expanded and (math.min(#values, 6) * 24 + 12) or 0)
 	end
 	local function setValue(v)
 		state = v
 		opener.Text = tostring(v)
+		arrow.Text = expanded and "▴" or "▾"
 		if callback then
 			callback(v)
 		end
 	end
-	local i, value, button
 	for i = 1, #values do
-		value = values[i]
-		button = create("TextButton", {
+		local value = values[i]
+		local button = create("TextButton", {
 			BackgroundTransparency = 0,
 			BorderSizePixel = 0,
-			Size = UDim2.new(1, 0, 0, 18),
+			Size = UDim2.new(1, 0, 0, 20),
 			Text = tostring(value),
 			Font = Enum.Font.Gotham,
 			TextSize = 12,
 			AutoButtonColor = false,
-			ZIndex = 13
+			ZIndex = 61
 		})
 		button.Parent = scroll
 		registerTheme(button, "BackgroundColor3", "Section")
 		registerTheme(button, "TextColor3", "Text")
 		addCorner(button, 6)
-		buttons[#buttons + 1] = button
 		button.MouseButton1Click:Connect(function()
 			setValue(value)
 			setExpanded(false)
@@ -957,6 +978,21 @@ local function createDropdown(parent, titleText, descriptionText, values, defaul
 	end
 	opener.MouseButton1Click:Connect(function()
 		setExpanded(not expanded)
+	end)
+	UserInputService.InputBegan:Connect(function(input, gp)
+		if gp then return end
+		if expanded and input.UserInputType == Enum.UserInputType.MouseButton1 then
+			local m = UserInputService:GetMouseLocation()
+			local p = popup.AbsolutePosition
+			local s = popup.AbsoluteSize
+			local insidePopup = m.X >= p.X and m.X <= p.X + s.X and m.Y >= p.Y and m.Y <= p.Y + s.Y
+			local op = opener.AbsolutePosition
+			local os = opener.AbsoluteSize
+			local insideOpener = m.X >= op.X and m.X <= op.X + os.X and m.Y >= op.Y and m.Y <= op.Y + os.Y
+			if not insidePopup and not insideOpener then
+				setExpanded(false)
+			end
+		end
 	end)
 	setValue(state)
 	return {
@@ -1103,8 +1139,8 @@ local function createInlineCheckColor(parent, titleText, descriptionText, initia
 	local colorButton = create("TextButton", {
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -44, 0.5, 0),
-		Size = UDim2.new(0, 72, 0, 24),
-		Text = tostring(colorName or "Red"),
+		Size = UDim2.new(0, 84, 0, 24),
+		Text = tostring(colorName or "White"),
 		Font = Enum.Font.GothamBold,
 		TextSize = 12,
 		AutoButtonColor = false,
@@ -1116,20 +1152,19 @@ local function createInlineCheckColor(parent, titleText, descriptionText, initia
 	addCorner(colorButton, 8)
 	addStroke(colorButton, "Outline", 1)
 
-	local expanded = false
-	local list = create("Frame", {
+	local popup = create("Frame", {
 		BackgroundTransparency = 0,
 		BorderSizePixel = 0,
-		Position = UDim2.new(1, -116, 1, 4),
-		Size = UDim2.new(0, 104, 0, 0),
 		Visible = false,
 		ClipsDescendants = true,
-		ZIndex = 12
+		ZIndex = 60,
+		Size = UDim2.new(0, 128, 0, 0)
 	})
-	list.Parent = holder
-	registerTheme(list, "BackgroundColor3", "PanelDark")
-	addCorner(list, 8)
-	addStroke(list, "Outline", 1)
+	popup.Parent = App.PopupLayer or App.Gui
+	registerTheme(popup, "BackgroundColor3", "PanelDark")
+	addCorner(popup, 10)
+	addStroke(popup, "Outline", 1)
+	makeGlow(popup, "Accent")
 
 	local scroll = create("ScrollingFrame", {
 		BackgroundTransparency = 1,
@@ -1138,59 +1173,60 @@ local function createInlineCheckColor(parent, titleText, descriptionText, initia
 		CanvasSize = UDim2.new(0, 0, 0, 0),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollBarThickness = 2,
-		ZIndex = 12
+		ZIndex = 61
 	})
-	scroll.Parent = list
+	scroll.Parent = popup
 	addPadding(scroll, 6, 6, 6, 6)
 	local layout = create("UIListLayout", {Padding = UDim.new(0, 6)})
 	layout.Parent = scroll
 
 	local state = initial and true or false
-	local currentColorName = colorName or "Red"
-	local i, row, label, swatch
+	local currentColorName = colorName or "White"
+	local expanded = false
+	local function updatePopupPosition()
+		local pos = colorButton.AbsolutePosition
+		local size = colorButton.AbsoluteSize
+		popup.Position = UDim2.new(0, pos.X + size.X - 128, 0, pos.Y + size.Y + 4)
+	end
 	local function setExpanded(v)
 		expanded = v and true or false
-		list.Visible = expanded
-		list.Size = UDim2.new(0, 104, 0, expanded and (math.min(#ColorMenus, 6) * 24 + 12) or 0)
-		holder.Size = UDim2.new(1, 0, 0, expanded and (48 + math.min(#ColorMenus, 6) * 24 + 16) or 48)
+		popup.Visible = expanded
+		if expanded then updatePopupPosition() end
+		popup.Size = UDim2.new(0, 128, 0, expanded and (math.min(#ColorMenus, 7) * 24 + 12) or 0)
 	end
 	local function setToggle(v)
 		state = v and true or false
 		check.TextTransparency = state and 0 or 1
-		if callbackToggle then
-			callbackToggle(state)
-		end
+		if callbackToggle then callbackToggle(state) end
 	end
 	local function setColor(v)
 		currentColorName = v
 		colorButton.Text = tostring(v)
 		colorButton.BackgroundColor3 = getColorByName(v)
-		if callbackColor then
-			callbackColor(v)
-		end
+		if callbackColor then callbackColor(v) end
 	end
 	for i = 1, #ColorMenus do
-		row = create("TextButton", {
+		local row = create("TextButton", {
 			BackgroundTransparency = 0,
 			BorderSizePixel = 0,
-			Size = UDim2.new(1, 0, 0, 18),
+			Size = UDim2.new(1, 0, 0, 20),
 			Text = "",
 			AutoButtonColor = false,
-			ZIndex = 13
+			ZIndex = 61
 		})
 		row.Parent = scroll
 		registerTheme(row, "BackgroundColor3", "Section")
 		addCorner(row, 6)
-		swatch = create("Frame", {
+		local swatch = create("Frame", {
 			BackgroundColor3 = ColorMenus[i][2],
 			BorderSizePixel = 0,
 			Position = UDim2.new(0, 6, 0.5, -5),
 			Size = UDim2.new(0, 10, 0, 10),
-			ZIndex = 13
+			ZIndex = 62
 		})
 		swatch.Parent = row
 		addCorner(swatch, 5)
-		label = create("TextLabel", {
+		local label = create("TextLabel", {
 			BackgroundTransparency = 1,
 			Position = UDim2.new(0, 22, 0, 0),
 			Size = UDim2.new(1, -24, 1, 0),
@@ -1198,7 +1234,7 @@ local function createInlineCheckColor(parent, titleText, descriptionText, initia
 			Font = Enum.Font.Gotham,
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			ZIndex = 13
+			ZIndex = 62
 		})
 		label.Parent = row
 		registerTheme(label, "TextColor3", "Text")
@@ -1207,11 +1243,20 @@ local function createInlineCheckColor(parent, titleText, descriptionText, initia
 			setExpanded(false)
 		end)
 	end
-	box.MouseButton1Click:Connect(function()
-		setToggle(not state)
-	end)
-	colorButton.MouseButton1Click:Connect(function()
-		setExpanded(not expanded)
+	box.MouseButton1Click:Connect(function() setToggle(not state) end)
+	colorButton.MouseButton1Click:Connect(function() setExpanded(not expanded) end)
+	UserInputService.InputBegan:Connect(function(input, gp)
+		if gp then return end
+		if expanded and input.UserInputType == Enum.UserInputType.MouseButton1 then
+			local m = UserInputService:GetMouseLocation()
+			local p = popup.AbsolutePosition
+			local s = popup.AbsoluteSize
+			local insidePopup = m.X >= p.X and m.X <= p.X + s.X and m.Y >= p.Y and m.Y <= p.Y + s.Y
+			local op = colorButton.AbsolutePosition
+			local os = colorButton.AbsoluteSize
+			local insideButton = m.X >= op.X and m.X <= op.X + os.X and m.Y >= op.Y and m.Y <= op.Y + os.Y
+			if not insidePopup and not insideButton then setExpanded(false) end
+		end
 	end)
 	setToggle(state)
 	setColor(currentColorName)
@@ -1219,12 +1264,8 @@ local function createInlineCheckColor(parent, titleText, descriptionText, initia
 		Holder = holder,
 		Set = setToggle,
 		SetColor = setColor,
-		Get = function()
-			return state
-		end,
-		GetColor = function()
-			return currentColorName
-		end
+		Get = function() return state end,
+		GetColor = function() return currentColorName end
 	}
 end
 
@@ -1235,6 +1276,14 @@ local function buildInterface()
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	})
 	App.Gui.Parent = CoreGui
+
+	App.PopupLayer = create("Frame", {
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		ZIndex = 50
+	})
+	App.PopupLayer.Parent = App.Gui
 
 	App.Root = create("Frame", {
 		BackgroundTransparency = 0,
@@ -1998,6 +2047,138 @@ local function updateVisualRecords()
 	end
 end
 
+
+local function buildLoginOverlay()
+	App.LoginOverlay = create("Frame", {
+		BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+		BackgroundTransparency = 0.18,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		ZIndex = 100
+	})
+	App.LoginOverlay.Parent = App.Gui
+
+	local panel = create("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0, 420, 0, 250),
+		BorderSizePixel = 0,
+		ZIndex = 101
+	})
+	panel.Parent = App.LoginOverlay
+	registerTheme(panel, "BackgroundColor3", "Main")
+	addCorner(panel, 18)
+	addStroke(panel, "Outline", 1)
+	makeTrackedGlow(panel, "Accent")
+
+	local glowTitle = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 20, 0, 18),
+		Size = UDim2.new(1, -40, 0, 42),
+		Text = "GLOW LOGIN",
+		Font = Enum.Font.GothamBlack,
+		TextSize = 32,
+		ZIndex = 102,
+		TextTransparency = 0.15
+	})
+	glowTitle.Parent = panel
+	registerTheme(glowTitle, "TextColor3", "Accent")
+
+	local subtitle = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 20, 0, 62),
+		Size = UDim2.new(1, -40, 0, 18),
+		Text = "Enter password to open the premium admin/debug panel",
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		ZIndex = 102
+	})
+	subtitle.Parent = panel
+	registerTheme(subtitle, "TextColor3", "SubText")
+
+	local box = create("TextBox", {
+		BackgroundTransparency = 0,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 20, 0, 102),
+		Size = UDim2.new(1, -40, 0, 40),
+		PlaceholderText = "Password",
+		Text = "",
+		ClearTextOnFocus = false,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextSize = 14,
+		Font = Enum.Font.Gotham,
+		ZIndex = 102,
+		TextTransparency = 1,
+		PlaceholderColor3 = Color3.fromRGB(140, 140, 140)
+	})
+	box.Parent = panel
+	registerTheme(box, "BackgroundColor3", "PanelDark")
+	addCorner(box, 10)
+	addStroke(box, "Outline", 1)
+
+	local masked = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 12, 0, 0),
+		Size = UDim2.new(1, -24, 1, 0),
+		Text = "",
+		Font = Enum.Font.Gotham,
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 103
+	})
+	masked.Parent = box
+	registerTheme(masked, "TextColor3", "Text")
+
+	local status = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 20, 0, 148),
+		Size = UDim2.new(1, -40, 0, 18),
+		Text = "",
+		Font = Enum.Font.Gotham,
+		TextSize = 12,
+		ZIndex = 102
+	})
+	status.Parent = panel
+	registerTheme(status, "TextColor3", "SubText")
+
+	local loginBtn = create("TextButton", {
+		BackgroundTransparency = 0,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 20, 0, 184),
+		Size = UDim2.new(1, -40, 0, 42),
+		Text = "Unlock Panel",
+		Font = Enum.Font.GothamBold,
+		TextSize = 14,
+		AutoButtonColor = false,
+		ZIndex = 102
+	})
+	loginBtn.Parent = panel
+	registerTheme(loginBtn, "BackgroundColor3", "Panel")
+	registerTheme(loginBtn, "TextColor3", "Text")
+	addCorner(loginBtn, 10)
+	addStroke(loginBtn, "Outline", 1)
+	makeTrackedGlow(loginBtn, "Accent")
+
+	local function tryLogin()
+		if box.Text == "chinito" then
+			App.LoginOverlay:Destroy()
+			App.LoginOverlay = nil
+			notify("Access", "Welcome back " .. tostring(LocalPlayer.DisplayName) .. ".")
+		else
+			status.Text = "Incorrect password"
+		end
+	end
+
+	box:GetPropertyChangedSignal("Text"):Connect(function()
+		masked.Text = string.rep("*", #box.Text)
+		status.Text = ""
+	end)
+	box.FocusLost:Connect(function(enterPressed)
+		if enterPressed then tryLogin() end
+	end)
+	loginBtn.MouseButton1Click:Connect(tryLogin)
+end
+
 local function buildPages()
 	local homePage = createPage("Home", "Overview, player profile, quick cards and admin/debug summary")
 	local visualPage = createPage("Visual", "Visual debug options with checkbox controls and inline color menus")
@@ -2354,6 +2535,7 @@ local function loop()
 end
 
 buildInterface()
+buildLoginOverlay()
 buildPages()
 buildFovCircle()
 hookEvents()
