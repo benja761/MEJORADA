@@ -44,69 +44,33 @@ local App = {
 }
 
 local State = {
-    MenuVisible = true,
-    Minimized = false,
-    MenuKey = Enum.KeyCode.RightShift,
-    AimKey = Enum.KeyCode.E,
-    AimActive = false,
-
-    ESPEnabled = false,
+       ESPEnabled = false,
     ESPPlayers = false,
     ESPNPCs = false,
-    ESPDistance = 500,
+    ESPDistance = 260,
     ESPColor = Color3.fromRGB(255, 255, 255),
-    ESPStyle = "Corner",
+    ESPStyle = "Box",
     Tracers = false,
     TracerOrigin = "Bottom",
-    HealthBar = false,
+    HealthBar = true,
     HealthBarSide = "Left",
     HealthBarThickness = 4,
     Skeleton = false,
     SkeletonType = "Current",
     SkeletonThickness = 1.6,
-    ESPNames = false,
+    ESPNames = true,
     ESPNameSize = 13,
     ESPGlow = false,
     CharacterPreview = false,
     ESPFluid = false,
     ESPFluidness = 0.18,
     DynamicQuality = true,
-    OnlyScreenTargets = false,
-    NameDistance = 260,
-    GlowDistance = 260,
-    TracerDistance = 380,
-    SkeletonDistance = 240,
-    HealthDistance = 360,
-
-    CombatEnabled = false,
-    ShowFOV = false,
-    FOV = 150,
-    Smooth = 0,
-    AimPart = "Head",
-    WallCheck = false,
-    AimMode = "Toggle",
-    AimPriority = "Distance",
-    AimDistance = 900,
-    LockTarget = false,
-    AimRequireFOV = true,
-    AimDeadzone = 0,
-    RetargetDelay = 0.08,
-    AimStickyStrength = 8.5,
-    AimPrediction = 0.00,
-
-
-    RenderPriority = "Distance",
-    MaxRenderedTargets = 24,
-    MaxSkeletonTargets = 6,
-    MaxTracerTargets = 10,
-    MaxNameTargets = 16,
-    TargetRefreshRate = 0.06,
-
-    ConfigName = "default",
-    SelectedConfig = "default",
-
-    MenuColor = Color3.fromRGB(245, 245, 255),
-    MenuTextColor = Color3.fromRGB(255, 255, 255),
+    OnlyScreenTargets = true,
+    NameDistance = 170,
+    GlowDistance = 140,
+    TracerDistance = 220,
+    SkeletonDistance = 150,
+    HealthDistance = 220,
 }
 
 local notify, rebuildPreview, refreshMenuState, updateFOV, refreshLobbyCards
@@ -1433,18 +1397,7 @@ local function collectTargets()
         end
 
         for _, inst in ipairs(Workspace:GetDescendants()) do
-            if inst:IsA("Model") and not seen[inst] then
-                local hum = getHumanoid(inst)
-                if hum and hum.Health > 0 then
-                    local owner = Players:GetPlayerFromCharacter(inst)
-                    if not owner then
-                        seen[inst] = true
-                    end
-                end
-            end
-        end
-    end
-
+            
     for model in pairs(seen) do
         table.insert(out, model)
     end
@@ -2810,13 +2763,11 @@ local function startLoop()
 
         local immediateMode = isFirstPersonOrControl()
         if State.ESPEnabled then
-            if immediateMode then
-                updateESP()
-                espTick = 0
-            elseif espTick >= espInterval then
-                espTick = 0
-                updateESP()
-            end
+           local minInterval = immediateMode and 0.016 or espInterval
+if espTick >= minInterval then
+    espTick = 0
+    updateESP()
+end
         else
             for target, rec in pairs(App.ESP) do
                 hideRecord(rec)
