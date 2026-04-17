@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -52,9 +51,9 @@ local State = {
     AimActive = false,
 
     ESPEnabled = false,
-    ESPPlayers = false,
-    ESPNPCs = false,
-    ESPDistance = 260,
+    ESPPlayers = true,
+    ESPNPCs = true,
+    ESPDistance = 650,
     ESPColor = Color3.fromRGB(255, 255, 255),
     ESPStyle = "Box",
     Tracers = false,
@@ -70,14 +69,14 @@ local State = {
     ESPGlow = false,
     CharacterPreview = false,
     ESPFluid = false,
-    ESPFluidness = 0.18,
-    DynamicQuality = true,
-    OnlyScreenTargets = true,
-    NameDistance = 170,
-    GlowDistance = 140,
-    TracerDistance = 220,
-    SkeletonDistance = 150,
-    HealthDistance = 220,
+    ESPFluidness = 0.12,
+    DynamicQuality = false,
+    OnlyScreenTargets = false,
+    NameDistance = 500,
+    GlowDistance = 450,
+    TracerDistance = 650,
+    SkeletonDistance = 450,
+    HealthDistance = 650,
 
     CombatEnabled = false,
     ShowFOV = false,
@@ -95,12 +94,12 @@ local State = {
     AimStickyStrength = 8.5,
     AimPrediction = 0.00,
 
-    RenderPriority = "Distance",
-    MaxRenderedTargets = 10,
-    MaxSkeletonTargets = 2,
-    MaxTracerTargets = 3,
-    MaxNameTargets = 5,
-    TargetRefreshRate = 0.12,
+    RenderPriority = "Crosshair",
+    MaxRenderedTargets = 30,
+    MaxSkeletonTargets = 12,
+    MaxTracerTargets = 16,
+    MaxNameTargets = 20,
+    TargetRefreshRate = 0.03,
 
     ConfigName = "default",
     SelectedConfig = "default",
@@ -279,34 +278,34 @@ local function applyVisualPreset(mode)
         setControlValue("NameDistance", 180)
     elseif mode == "Quality" then
         setControlValue("ESPFluid", false)
-        setControlValue("ESPFluidness", 0.18)
+        setControlValue("ESPFluidness", 0.12)
         setControlValue("DynamicQuality", false)
         setControlValue("OnlyScreenTargets", false)
-        setControlValue("MaxRenderedTargets", 18)
-        setControlValue("MaxSkeletonTargets", 6)
-        setControlValue("MaxTracerTargets", 9)
-        setControlValue("MaxNameTargets", 10)
-        setControlValue("TargetRefreshRate", 0.07)
-        setControlValue("GlowDistance", 320)
-        setControlValue("SkeletonDistance", 280)
-        setControlValue("TracerDistance", 420)
-        setControlValue("HealthDistance", 420)
-        setControlValue("NameDistance", 280)
+        setControlValue("MaxRenderedTargets", 30)
+        setControlValue("MaxSkeletonTargets", 12)
+        setControlValue("MaxTracerTargets", 16)
+        setControlValue("MaxNameTargets", 20)
+        setControlValue("TargetRefreshRate", 0.03)
+        setControlValue("GlowDistance", 450)
+        setControlValue("SkeletonDistance", 450)
+        setControlValue("TracerDistance", 650)
+        setControlValue("HealthDistance", 650)
+        setControlValue("NameDistance", 500)
     else
         setControlValue("ESPFluid", false)
-        setControlValue("ESPFluidness", 0.18)
-        setControlValue("DynamicQuality", true)
+        setControlValue("ESPFluidness", 0.12)
+        setControlValue("DynamicQuality", false)
         setControlValue("OnlyScreenTargets", false)
-        setControlValue("MaxRenderedTargets", 14)
-        setControlValue("MaxSkeletonTargets", 4)
-        setControlValue("MaxTracerTargets", 6)
-        setControlValue("MaxNameTargets", 7)
-        setControlValue("TargetRefreshRate", 0.09)
-        setControlValue("GlowDistance", 240)
-        setControlValue("SkeletonDistance", 220)
-        setControlValue("TracerDistance", 340)
-        setControlValue("HealthDistance", 340)
-        setControlValue("NameDistance", 230)
+        setControlValue("MaxRenderedTargets", 24)
+        setControlValue("MaxSkeletonTargets", 8)
+        setControlValue("MaxTracerTargets", 12)
+        setControlValue("MaxNameTargets", 16)
+        setControlValue("TargetRefreshRate", 0.04)
+        setControlValue("GlowDistance", 360)
+        setControlValue("SkeletonDistance", 340)
+        setControlValue("TracerDistance", 520)
+        setControlValue("HealthDistance", 520)
+        setControlValue("NameDistance", 380)
     end
 end
 
@@ -490,6 +489,22 @@ local function applyLoadedState(data)
     setIf("MaxTracerTargets", tonumber(data.MaxTracerTargets) or State.MaxTracerTargets)
     setIf("MaxNameTargets", tonumber(data.MaxNameTargets) or State.MaxNameTargets)
     setIf("TargetRefreshRate", tonumber(data.TargetRefreshRate) or State.TargetRefreshRate)
+
+    if State.ESPDistance < 650 then setIf("ESPDistance", 650) end
+    if State.NameDistance < 500 then setIf("NameDistance", 500) end
+    if State.GlowDistance < 450 then setIf("GlowDistance", 450) end
+    if State.TracerDistance < 650 then setIf("TracerDistance", 650) end
+    if State.SkeletonDistance < 450 then setIf("SkeletonDistance", 450) end
+    if State.HealthDistance < 650 then setIf("HealthDistance", 650) end
+    if State.MaxRenderedTargets < 30 then setIf("MaxRenderedTargets", 30) end
+    if State.MaxSkeletonTargets < 12 then setIf("MaxSkeletonTargets", 12) end
+    if State.MaxTracerTargets < 16 then setIf("MaxTracerTargets", 16) end
+    if State.MaxNameTargets < 20 then setIf("MaxNameTargets", 20) end
+    if State.TargetRefreshRate > 0.03 then setIf("TargetRefreshRate", 0.03) end
+    if State.DynamicQuality then setIf("DynamicQuality", false) end
+    if State.OnlyScreenTargets then setIf("OnlyScreenTargets", false) end
+    if not State.ESPPlayers then setIf("ESPPlayers", true) end
+    if not State.ESPNPCs then setIf("ESPNPCs", true) end
 
     local selected = tostring(data.ConfigName or data.SelectedConfig or "default")
     App.RuntimeConfigNames[selected] = true
@@ -1461,7 +1476,7 @@ local function collectTargets()
             end
         end
 
-        for _, folderName in ipairs({"NPCs","Enemies","Mobs","Bots"}) do
+        for _, folderName in ipairs({"NPCs","Enemies","Mobs","Bots","NPC","Enemy","Mob","Bot"}) do
             local folder = Workspace:FindFirstChild(folderName)
             if folder then
                 for _, child in ipairs(folder:GetDescendants()) do
@@ -2056,22 +2071,22 @@ local function renderTargetESP(target, rank, heavyCount, currentAimModel, live)
     if State.DynamicQuality then
         local mul = 1
         if heavyCount >= 16 then
-            mul = 0.58
-            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.45))
-            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.55))
-            maxNameBudget = math.max(4, math.floor(maxNameBudget * 0.55))
+            mul = 0.78
+            maxSkeletonBudget = math.max(4, math.floor(maxSkeletonBudget * 0.7))
+            maxTracerBudget = math.max(6, math.floor(maxTracerBudget * 0.75))
+            maxNameBudget = math.max(8, math.floor(maxNameBudget * 0.78))
         elseif heavyCount >= 12 then
-            mul = 0.70
-            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.55))
-            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.7))
-            maxNameBudget = math.max(4, math.floor(maxNameBudget * 0.7))
+            mul = 0.86
+            maxSkeletonBudget = math.max(4, math.floor(maxSkeletonBudget * 0.78))
+            maxTracerBudget = math.max(6, math.floor(maxTracerBudget * 0.82))
+            maxNameBudget = math.max(8, math.floor(maxNameBudget * 0.84))
         elseif heavyCount >= 8 then
-            mul = 0.82
-            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.75))
-            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.82))
-            maxNameBudget = math.max(5, math.floor(maxNameBudget * 0.82))
-        elseif heavyCount >= 5 then
             mul = 0.92
+            maxSkeletonBudget = math.max(5, math.floor(maxSkeletonBudget * 0.88))
+            maxTracerBudget = math.max(8, math.floor(maxTracerBudget * 0.9))
+            maxNameBudget = math.max(10, math.floor(maxNameBudget * 0.92))
+        elseif heavyCount >= 5 then
+            mul = 0.96
         end
         glowDistance = glowDistance * mul
         nameDistance = nameDistance * mul
