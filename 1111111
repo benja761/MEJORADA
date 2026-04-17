@@ -1435,12 +1435,8 @@ local function collectTargets()
     for model in pairs(seen) do
         table.insert(out, model)
     end
-
     return out
 end
-
-
-
 local function getPartByNames(model, names)
     for _, name in ipairs(names) do
         local part = model:FindFirstChild(name)
@@ -2798,11 +2794,11 @@ local function startLoop()
 
         local immediateMode = isFirstPersonOrControl()
         if State.ESPEnabled then
-           local minInterval = immediateMode and 0.016 or espInterval
-if espTick >= minInterval then
-    espTick = 0
-    updateESP()
-end
+            local minInterval = immediateMode and 0.016 or espInterval
+            if espTick >= minInterval then
+                espTick = 0
+                updateESP()
+            end
         else
             for target, rec in pairs(App.ESP) do
                 hideRecord(rec)
