@@ -1,3 +1,4 @@
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -1531,6 +1532,9 @@ local function refreshTargetCache()
         maxDistance = math.max(State.ESPDistance, State.AimDistance)
     end
 
+    local currentAimPart = App.CurrentAimTarget
+    local currentAimModel = currentAimPart and currentAimPart.Parent
+
     local pool = {}
     for _, model in ipairs(collectTargets()) do
         local root = getRoot(model)
@@ -1542,10 +1546,18 @@ local function refreshTargetCache()
                 if State.OnlyScreenTargets then
                     local pos, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
                     if onScreen and pos.Z > 0 then
-                        table.insert(pool, {Model = model, Score = getPriorityScore(model), Distance = dist})
+                        local score = getPriorityScore(model)
+                        if currentAimModel and model == currentAimModel then
+                            score = score * 0.35
+                        end
+                        table.insert(pool, {Model = model, Score = score, Distance = dist})
                     end
                 else
-                    table.insert(pool, {Model = model, Score = getPriorityScore(model), Distance = dist})
+                    local score = getPriorityScore(model)
+                    if currentAimModel and model == currentAimModel then
+                        score = score * 0.35
+                    end
+                    table.insert(pool, {Model = model, Score = score, Distance = dist})
                 end
             end
         end
@@ -1557,6 +1569,16 @@ local function refreshTargetCache()
         end
         return a.Score < b.Score
     end)
+
+    if currentAimModel then
+        for i, entry in ipairs(pool) do
+            if entry.Model == currentAimModel and i ~= 1 then
+                table.remove(pool, i)
+                table.insert(pool, 1, entry)
+                break
+            end
+        end
+    end
 
     for i = 1, math.min(#pool, math.max(1, State.MaxRenderedTargets)) do
         App.TargetCache[i] = pool[i].Model
@@ -1687,18 +1709,28 @@ local function getAimTarget()
         return true
     end
 
-    if App.CurrentAimTarget and validPart(App.CurrentAimTarget) then
+    local currentTarget = App.CurrentAimTarget
+    if currentTarget and validPart(currentTarget) then
         if State.LockTarget then
-            return App.CurrentAimTarget
+            return currentTarget
         end
         local waitRetarget = math.max(0, tonumber(State.RetargetDelay) or 0.08)
         if App.AimTargetChangedAt and (now - App.AimTargetChangedAt) < waitRetarget then
-            return App.CurrentAimTarget
+            return currentTarget
+        end
+        if App.LastAimScanAt and (now - App.LastAimScanAt) < 0.025 then
+            return currentTarget
         end
     end
 
+    App.LastAimScanAt = now
+
     local bestPart, bestMetric = nil, math.huge
-    local source = (#App.TargetCache > 0 and App.TargetCache) or collectTargets()
+    local source = App.TargetCache
+    if #source == 0 then
+        refreshTargetCache()
+        source = App.TargetCache
+    end
 
     for _, model in ipairs(source) do
         local hum = getHumanoid(model)
@@ -1719,8 +1751,8 @@ local function getAimTarget()
                         elseif State.AimPriority == "Visible" then
                             metric = passesWallCheck(model, part) and diff or (diff + 50000)
                         end
-                        if App.CurrentAimTarget and part == App.CurrentAimTarget then
-                            metric = metric * 0.55
+                        if currentTarget and part == currentTarget then
+                            metric = metric * 0.45
                         end
                         if metric < bestMetric then
                             bestMetric = metric
@@ -1732,7 +1764,7 @@ local function getAimTarget()
         end
     end
 
-    if bestPart ~= App.CurrentAimTarget then
+    if bestPart ~= currentTarget then
         App.CurrentAimTarget = bestPart
         App.AimTargetChangedAt = now
     end
@@ -1938,6 +1970,25 @@ local function updateESP()
     local live = {}
     local targets = State.ESPEnabled and App.TargetCache or {}
     local heavyCount = #targets
+    local currentAimPart = App.CurrentAimTarget
+    local currentAimModel = currentAimPart and currentAimPart.Parent
+
+    if currentAimModel and #targets > 1 then
+        local prioritized = {}
+        local insertedAim = false
+        for _, target in ipairs(targets) do
+            if target == currentAimModel and not insertedAim then
+                table.insert(prioritized, currentAimModel)
+                insertedAim = true
+            elseif target ~= currentAimModel then
+                table.insert(prioritized, target)
+            end
+        end
+        if not insertedAim then
+            table.insert(prioritized, 1, currentAimModel)
+        end
+        targets = prioritized
+    end
 
     for rank, target in ipairs(targets) do
         local root = getRoot(target)
@@ -1951,9 +2002,10 @@ local function updateESP()
                     local rec = App.ESP[target] or createESPRecord(target)
                     live[target] = true
                     local c = State.ESPColor
-
                     local immediateMode = isFirstPersonOrControl()
-                    if State.ESPFluid and not immediateMode then
+                    local isAimTarget = currentAimModel and target == currentAimModel
+
+                    if State.ESPFluid and not immediateMode and not isAimTarget then
                         local alpha = math.clamp(tonumber(State.ESPFluidness) or 0.18, 0.08, 0.35)
                         local s = rec.SmoothState
                         if not s then
@@ -2008,16 +2060,17 @@ local function updateESP()
                         healthDistance = healthDistance * mul
                     end
 
-                    if immediateMode then
-                        glowDistance = math.max(glowDistance, 220)
-                        nameDistance = math.max(nameDistance, 260)
+                    if immediateMode or isAimTarget then
+                        glowDistance = math.max(glowDistance, 180)
+                        nameDistance = math.max(nameDistance, 240)
+                        healthDistance = math.max(healthDistance, 240)
                     end
 
-                    local glowEnabled = State.ESPGlow and dist <= glowDistance
-                    local showTracer = State.Tracers and rank <= maxTracerBudget and dist <= tracerDistance
-                    local showSkeleton = State.Skeleton and rank <= maxSkeletonBudget and dist <= skeletonDistance
-                    local showNames = State.ESPNames and rank <= maxNameBudget and dist <= nameDistance
-                    local showHealth = State.HealthBar and dist <= healthDistance
+                    local glowEnabled = State.ESPGlow and dist <= glowDistance and not (State.AimActive and heavyCount >= 6)
+                    local showTracer = State.Tracers and ((rank <= maxTracerBudget and dist <= tracerDistance) or isAimTarget)
+                    local showSkeleton = State.Skeleton and ((rank <= maxSkeletonBudget and dist <= skeletonDistance) or (isAimTarget and dist <= math.max(200, skeletonDistance)))
+                    local showNames = State.ESPNames and ((rank <= maxNameBudget and dist <= nameDistance) or isAimTarget)
+                    local showHealth = State.HealthBar and (dist <= healthDistance or isAimTarget)
 
                     rec.BoxGlow.Visible = false
                     rec.Box.Visible = false
@@ -2769,7 +2822,12 @@ local function startLoop()
         fpsTick += dt
         fpsFrames += 1
 
-        if targetTick >= State.TargetRefreshRate then
+        local targetInterval = State.TargetRefreshRate
+        if State.AimActive and App.CurrentAimTarget then
+            targetInterval = math.min(targetInterval, 0.03)
+        end
+
+        if targetTick >= targetInterval then
             targetTick = 0
             refreshTargetCache()
         end
@@ -2792,9 +2850,19 @@ local function startLoop()
             end
         end
 
-        local immediateMode = isFirstPersonOrControl()
+        local immediateMode = isFirstPersonOrControl() or (State.AimActive and App.CurrentAimTarget ~= nil)
+        if State.AimActive and App.CurrentAimTarget then
+            if count <= 3 then
+                espInterval = 0.008
+            elseif count <= 6 then
+                espInterval = 0.011
+            else
+                espInterval = 0.014
+            end
+        end
+
         if State.ESPEnabled then
-            local minInterval = immediateMode and 0.016 or espInterval
+            local minInterval = immediateMode and math.min(espInterval, 0.010) or espInterval
             if espTick >= minInterval then
                 espTick = 0
                 updateESP()
