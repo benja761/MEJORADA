@@ -634,6 +634,46 @@ local function distanceTo(pos)
     return (root.Position - pos).Magnitude
 end
 
+local function teleportToPlayer(plr)
+    local myChar = getCharacter()
+    local myRoot = localRoot()
+    local targetChar = plr and plr.Character
+    local targetRoot = targetChar and getRoot(targetChar)
+    if not myChar or not myRoot then
+        notify("TP", "No se encontró tu personaje.")
+        return false
+    end
+    if not targetRoot then
+        notify("TP", "El jugador no tiene personaje cargado.")
+        return false
+    end
+
+    local offset = targetRoot.CFrame.LookVector * -3
+    local destination = CFrame.new(targetRoot.Position + offset + Vector3.new(0, 0.2, 0), targetRoot.Position)
+
+    local ok = pcall(function()
+        if myChar.PrimaryPart then
+            myChar:PivotTo(destination)
+        else
+            myRoot.CFrame = destination
+        end
+        task.defer(function()
+            if myRoot and myRoot.Parent then
+                myRoot.AssemblyLinearVelocity = Vector3.zero
+                myRoot.AssemblyAngularVelocity = Vector3.zero
+            end
+        end)
+    end)
+
+    if ok then
+        notify("TP", "Teleport a " .. plr.DisplayName)
+        return true
+    end
+
+    notify("TP", "No se pudo mover al personaje.")
+    return false
+end
+
 local function isAliveModel(model)
     local hum = getHumanoid(model)
     return hum and hum.Health > 0
@@ -1718,7 +1758,7 @@ local function getAimTarget()
         if App.AimTargetChangedAt and (now - App.AimTargetChangedAt) < waitRetarget then
             return currentTarget
         end
-        if App.LastAimScanAt and (now - App.LastAimScanAt) < 0.025 then
+        if App.LastAimScanAt and (now - App.LastAimScanAt) < 0.04 then
             return currentTarget
         end
     end
@@ -1732,7 +1772,9 @@ local function getAimTarget()
         source = App.TargetCache
     end
 
-    for _, model in ipairs(source) do
+    local scanLimit = math.min(#source, currentTarget and 8 or 12)
+    for i = 1, scanLimit do
+        local model = source[i]
         local hum = getHumanoid(model)
         local root = getRoot(model)
         local part = getTargetPart(model)
@@ -1966,6 +2008,143 @@ local function drawHealth(rec, x, y, w, h, healthPct, enabled, glowEnabled)
     end
 end
 
+local function renderTargetESP(target, rank, heavyCount, currentAimModel, live)
+    local root = getRoot(target)
+    local hum = getHumanoid(target)
+    if not (root and hum and hum.Health > 0) then return false end
+
+    local dist = distanceTo(root.Position)
+    if dist > State.ESPDistance then return false end
+
+    local boxX, boxY, boxW, boxH, headPoint, rootPoint = estimateBoxFromModel(target)
+    if not (boxX and boxH and boxW and headPoint and rootPoint) then return false end
+
+    local rec = App.ESP[target] or createESPRecord(target)
+    if live then live[target] = true end
+    local c = State.ESPColor
+    local immediateMode = isFirstPersonOrControl()
+    local isAimTarget = currentAimModel and target == currentAimModel
+
+    if State.ESPFluid and not immediateMode and not isAimTarget then
+        local alpha = math.clamp(tonumber(State.ESPFluidness) or 0.18, 0.08, 0.35)
+        local s = rec.SmoothState
+        if not s then
+            s = {w = boxW, h = boxH}
+            rec.SmoothState = s
+        else
+            s.w = s.w + ((boxW - s.w) * alpha)
+            s.h = s.h + ((boxH - s.h) * alpha)
+        end
+        boxW, boxH = s.w, s.h
+    else
+        rec.SmoothState = nil
+    end
+
+    boxX = rootPoint.X - (boxW * 0.5)
+    boxY = headPoint.Y - (boxH * 0.16)
+
+    local glowDistance = State.GlowDistance
+    local nameDistance = State.NameDistance
+    local tracerDistance = State.TracerDistance
+    local skeletonDistance = State.SkeletonDistance
+    local healthDistance = State.HealthDistance
+
+    local maxSkeletonBudget = State.MaxSkeletonTargets
+    local maxTracerBudget = State.MaxTracerTargets
+    local maxNameBudget = State.MaxNameTargets
+
+    if State.DynamicQuality then
+        local mul = 1
+        if heavyCount >= 16 then
+            mul = 0.58
+            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.45))
+            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.55))
+            maxNameBudget = math.max(4, math.floor(maxNameBudget * 0.55))
+        elseif heavyCount >= 12 then
+            mul = 0.70
+            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.55))
+            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.7))
+            maxNameBudget = math.max(4, math.floor(maxNameBudget * 0.7))
+        elseif heavyCount >= 8 then
+            mul = 0.82
+            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.75))
+            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.82))
+            maxNameBudget = math.max(5, math.floor(maxNameBudget * 0.82))
+        elseif heavyCount >= 5 then
+            mul = 0.92
+        end
+        glowDistance = glowDistance * mul
+        nameDistance = nameDistance * mul
+        tracerDistance = tracerDistance * mul
+        skeletonDistance = skeletonDistance * mul
+        healthDistance = healthDistance * mul
+    end
+
+    if immediateMode or isAimTarget then
+        glowDistance = math.max(glowDistance, 180)
+        nameDistance = math.max(nameDistance, 240)
+        healthDistance = math.max(healthDistance, 240)
+    end
+
+    local glowEnabled = State.ESPGlow and dist <= glowDistance and not (State.AimActive and heavyCount >= 6)
+    local showTracer = State.Tracers and ((rank <= maxTracerBudget and dist <= tracerDistance) or isAimTarget)
+    local showSkeleton = State.Skeleton and ((rank <= maxSkeletonBudget and dist <= skeletonDistance) or (isAimTarget and dist <= math.max(200, skeletonDistance)))
+    local showNames = State.ESPNames and ((rank <= maxNameBudget and dist <= nameDistance) or isAimTarget)
+    local showHealth = State.HealthBar and (dist <= healthDistance or isAimTarget)
+
+    rec.BoxGlow.Visible = false
+    rec.Box.Visible = false
+    rec.LineGlow.Visible = false
+    rec.Line.Visible = false
+    for _, l in ipairs(rec.CornerGlow) do l.Visible = false end
+    for _, l in ipairs(rec.Corners) do l.Visible = false end
+    for _, l in ipairs(rec.CornerRoundGlow) do l.Visible = false end
+    for _, l in ipairs(rec.CornerRound) do l.Visible = false end
+
+    if State.ESPStyle == "Box" then
+        if glowEnabled then
+            rec.BoxGlow.Position = Vector2.new(boxX, boxY)
+            rec.BoxGlow.Size = Vector2.new(boxW, boxH)
+            rec.BoxGlow.Color = c
+            rec.BoxGlow.Visible = true
+        end
+
+        rec.Box.Position = Vector2.new(boxX, boxY)
+        rec.Box.Size = Vector2.new(boxW, boxH)
+        rec.Box.Color = c
+        rec.Box.Visible = true
+    else
+        drawCornerBox(rec, boxX, boxY, boxW, boxH, c, glowEnabled)
+    end
+
+    if showTracer then
+        local origin = getTracerOrigin()
+        local tracerPoint = headPoint or Vector2.new(rootPoint.X, boxY)
+        if glowEnabled then
+            rec.LineGlow.From = origin
+            rec.LineGlow.To = tracerPoint
+            rec.LineGlow.Color = c
+            rec.LineGlow.Visible = true
+        end
+
+        rec.Line.From = origin
+        rec.Line.To = tracerPoint
+        rec.Line.Color = c
+        rec.Line.Visible = true
+    end
+
+    drawHealth(rec, boxX, boxY, boxW, boxH, hum.Health / math.max(hum.MaxHealth, 1), showHealth, glowEnabled)
+    drawSkeleton(rec, target, c, boxH, showSkeleton, glowEnabled)
+
+    local nameText = target.Name
+    local owner = Players:GetPlayerFromCharacter(target)
+    if owner then
+        nameText = owner.DisplayName
+    end
+    drawName(rec, nameText, boxX, boxY, boxW, c, showNames)
+    return true
+end
+
 local function updateESP()
     local live = {}
     local targets = State.ESPEnabled and App.TargetCache or {}
@@ -1991,141 +2170,9 @@ local function updateESP()
     end
 
     for rank, target in ipairs(targets) do
-        local root = getRoot(target)
-        local hum = getHumanoid(target)
-        local head = target:FindFirstChild("Head") or getTargetPart(target)
-        if root and hum and hum.Health > 0 then
-            local dist = distanceTo(root.Position)
-            if dist <= State.ESPDistance then
-                local boxX, boxY, boxW, boxH, headPoint, rootPoint = estimateBoxFromModel(target)
-                if boxX and boxH and boxW and headPoint and rootPoint then
-                    local rec = App.ESP[target] or createESPRecord(target)
-                    live[target] = true
-                    local c = State.ESPColor
-                    local immediateMode = isFirstPersonOrControl()
-                    local isAimTarget = currentAimModel and target == currentAimModel
-
-                    if State.ESPFluid and not immediateMode and not isAimTarget then
-                        local alpha = math.clamp(tonumber(State.ESPFluidness) or 0.18, 0.08, 0.35)
-                        local s = rec.SmoothState
-                        if not s then
-                            s = {w = boxW, h = boxH}
-                            rec.SmoothState = s
-                        else
-                            s.w = s.w + ((boxW - s.w) * alpha)
-                            s.h = s.h + ((boxH - s.h) * alpha)
-                        end
-                        boxW, boxH = s.w, s.h
-                    else
-                        rec.SmoothState = nil
-                    end
-
-                    boxX = rootPoint.X - (boxW * 0.5)
-                    boxY = headPoint.Y - (boxH * 0.16)
-
-                    local glowDistance = State.GlowDistance
-                    local nameDistance = State.NameDistance
-                    local tracerDistance = State.TracerDistance
-                    local skeletonDistance = State.SkeletonDistance
-                    local healthDistance = State.HealthDistance
-
-                    local maxSkeletonBudget = State.MaxSkeletonTargets
-                    local maxTracerBudget = State.MaxTracerTargets
-                    local maxNameBudget = State.MaxNameTargets
-
-                    if State.DynamicQuality then
-                        local mul = 1
-                        if heavyCount >= 16 then
-                            mul = 0.58
-                            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.45))
-                            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.55))
-                            maxNameBudget = math.max(4, math.floor(maxNameBudget * 0.55))
-                        elseif heavyCount >= 12 then
-                            mul = 0.70
-                            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.55))
-                            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.7))
-                            maxNameBudget = math.max(4, math.floor(maxNameBudget * 0.7))
-                        elseif heavyCount >= 8 then
-                            mul = 0.82
-                            maxSkeletonBudget = math.max(1, math.floor(maxSkeletonBudget * 0.75))
-                            maxTracerBudget = math.max(2, math.floor(maxTracerBudget * 0.82))
-                            maxNameBudget = math.max(5, math.floor(maxNameBudget * 0.82))
-                        elseif heavyCount >= 5 then
-                            mul = 0.92
-                        end
-                        glowDistance = glowDistance * mul
-                        nameDistance = nameDistance * mul
-                        tracerDistance = tracerDistance * mul
-                        skeletonDistance = skeletonDistance * mul
-                        healthDistance = healthDistance * mul
-                    end
-
-                    if immediateMode or isAimTarget then
-                        glowDistance = math.max(glowDistance, 180)
-                        nameDistance = math.max(nameDistance, 240)
-                        healthDistance = math.max(healthDistance, 240)
-                    end
-
-                    local glowEnabled = State.ESPGlow and dist <= glowDistance and not (State.AimActive and heavyCount >= 6)
-                    local showTracer = State.Tracers and ((rank <= maxTracerBudget and dist <= tracerDistance) or isAimTarget)
-                    local showSkeleton = State.Skeleton and ((rank <= maxSkeletonBudget and dist <= skeletonDistance) or (isAimTarget and dist <= math.max(200, skeletonDistance)))
-                    local showNames = State.ESPNames and ((rank <= maxNameBudget and dist <= nameDistance) or isAimTarget)
-                    local showHealth = State.HealthBar and (dist <= healthDistance or isAimTarget)
-
-                    rec.BoxGlow.Visible = false
-                    rec.Box.Visible = false
-                    rec.LineGlow.Visible = false
-                    rec.Line.Visible = false
-                    for _, l in ipairs(rec.CornerGlow) do l.Visible = false end
-                    for _, l in ipairs(rec.Corners) do l.Visible = false end
-                    for _, l in ipairs(rec.CornerRoundGlow) do l.Visible = false end
-                    for _, l in ipairs(rec.CornerRound) do l.Visible = false end
-
-                    if State.ESPStyle == "Box" then
-                        if glowEnabled then
-                            rec.BoxGlow.Position = Vector2.new(boxX, boxY)
-                            rec.BoxGlow.Size = Vector2.new(boxW, boxH)
-                            rec.BoxGlow.Color = c
-                            rec.BoxGlow.Visible = true
-                        end
-
-                        rec.Box.Position = Vector2.new(boxX, boxY)
-                        rec.Box.Size = Vector2.new(boxW, boxH)
-                        rec.Box.Color = c
-                        rec.Box.Visible = true
-                    else
-                        drawCornerBox(rec, boxX, boxY, boxW, boxH, c, glowEnabled)
-                    end
-
-                    if showTracer then
-                        local origin = getTracerOrigin()
-                        local tracerPoint = headPoint or Vector2.new(rootPoint.X, boxY)
-                        if glowEnabled then
-                            rec.LineGlow.From = origin
-                            rec.LineGlow.To = tracerPoint
-                            rec.LineGlow.Color = c
-                            rec.LineGlow.Visible = true
-                        end
-
-                        rec.Line.From = origin
-                        rec.Line.To = tracerPoint
-                        rec.Line.Color = c
-                        rec.Line.Visible = true
-                    end
-
-                    drawHealth(rec, boxX, boxY, boxW, boxH, hum.Health / math.max(hum.MaxHealth, 1), showHealth, glowEnabled)
-                    drawSkeleton(rec, target, c, boxH, showSkeleton, glowEnabled)
-
-                    local nameText = target.Name
-                    local owner = Players:GetPlayerFromCharacter(target)
-                    if owner then
-                        nameText = owner.DisplayName
-                    end
-                    drawName(rec, nameText, boxX, boxY, boxW, c, showNames)
-                end
-            end
-        end
+        renderTargetESP(target, rank, heavyCount, currentAimModel, live)
     end
+
     for target, rec in pairs(App.ESP) do
         if not live[target] then
             rec.SmoothState = nil
@@ -2458,7 +2505,7 @@ refreshLobbyCards = function()
         addCorner(tpBtn, 8)
         addStroke(tpBtn)
         tpBtn.MouseButton1Click:Connect(function()
-            notify("Perf", "TP placeholder para " .. plr.DisplayName .. ". El botón está solo visible, sin acción.")
+            teleportToPlayer(plr)
         end)
 
         local btn = create("TextButton", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(1,-74,1,-32), Size=UDim2.new(0,64,0,22), Text='Watch', Font=Enum.Font.GothamBold, TextSize=11, AutoButtonColor=false})
@@ -2866,6 +2913,8 @@ local function startLoop()
             if espTick >= minInterval then
                 espTick = 0
                 updateESP()
+            elseif State.AimActive and App.CurrentAimTarget and App.CurrentAimTarget.Parent then
+                renderTargetESP(App.CurrentAimTarget.Parent, 1, math.max(count, 1), App.CurrentAimTarget.Parent, nil)
             end
         else
             for target, rec in pairs(App.ESP) do
