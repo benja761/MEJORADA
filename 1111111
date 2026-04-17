@@ -44,7 +44,13 @@ local App = {
 }
 
 local State = {
-       ESPEnabled = false,
+    MenuVisible = true,
+    Minimized = false,
+    MenuKey = Enum.KeyCode.RightShift,
+    AimKey = Enum.KeyCode.E,
+    AimActive = false,
+
+    ESPEnabled = false,
     ESPPlayers = false,
     ESPNPCs = false,
     ESPDistance = 260,
@@ -71,6 +77,35 @@ local State = {
     TracerDistance = 220,
     SkeletonDistance = 150,
     HealthDistance = 220,
+
+    CombatEnabled = false,
+    ShowFOV = false,
+    FOV = 150,
+    Smooth = 0,
+    AimPart = "Head",
+    WallCheck = false,
+    AimMode = "Toggle",
+    AimPriority = "Distance",
+    AimDistance = 900,
+    LockTarget = false,
+    AimRequireFOV = true,
+    AimDeadzone = 0,
+    RetargetDelay = 0.08,
+    AimStickyStrength = 8.5,
+    AimPrediction = 0.00,
+
+    RenderPriority = "Distance",
+    MaxRenderedTargets = 10,
+    MaxSkeletonTargets = 2,
+    MaxTracerTargets = 3,
+    MaxNameTargets = 5,
+    TargetRefreshRate = 0.12,
+
+    ConfigName = "default",
+    SelectedConfig = "default",
+
+    MenuColor = Color3.fromRGB(245, 245, 255),
+    MenuTextColor = Color3.fromRGB(255, 255, 255),
 }
 
 local notify, rebuildPreview, refreshMenuState, updateFOV, refreshLobbyCards
@@ -1395,12 +1430,12 @@ local function collectTargets()
                 end
             end
         end
+    end
 
-        for _, inst in ipairs(Workspace:GetDescendants()) do
-            
     for model in pairs(seen) do
         table.insert(out, model)
     end
+
     return out
 end
 
