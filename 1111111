@@ -53,30 +53,30 @@ local State = {
     ESPEnabled = false,
     ESPPlayers = true,
     ESPNPCs = true,
-    ESPDistance = 650,
+    ESPDistance = 260,
     ESPColor = Color3.fromRGB(255, 255, 255),
     ESPStyle = "Box",
     Tracers = false,
     TracerOrigin = "Bottom",
-    HealthBar = true,
+    HealthBar = false,
     HealthBarSide = "Left",
     HealthBarThickness = 4,
     Skeleton = false,
     SkeletonType = "Current",
     SkeletonThickness = 1.6,
-    ESPNames = true,
+    ESPNames = false,
     ESPNameSize = 13,
     ESPGlow = false,
     CharacterPreview = false,
     ESPFluid = false,
     ESPFluidness = 0.12,
-    DynamicQuality = false,
-    OnlyScreenTargets = false,
-    NameDistance = 500,
-    GlowDistance = 450,
-    TracerDistance = 650,
-    SkeletonDistance = 450,
-    HealthDistance = 650,
+    DynamicQuality = true,
+    OnlyScreenTargets = true,
+    NameDistance = 180,
+    GlowDistance = 140,
+    TracerDistance = 220,
+    SkeletonDistance = 150,
+    HealthDistance = 220,
 
     CombatEnabled = false,
     ShowFOV = false,
@@ -95,11 +95,11 @@ local State = {
     AimPrediction = 0.00,
 
     RenderPriority = "Crosshair",
-    MaxRenderedTargets = 30,
-    MaxSkeletonTargets = 12,
-    MaxTracerTargets = 16,
-    MaxNameTargets = 20,
-    TargetRefreshRate = 0.03,
+    MaxRenderedTargets = 8,
+    MaxSkeletonTargets = 2,
+    MaxTracerTargets = 3,
+    MaxNameTargets = 4,
+    TargetRefreshRate = 0.10,
 
     ConfigName = "default",
     SelectedConfig = "default",
@@ -733,36 +733,35 @@ local function createGlowText(parent, text, pos, size, textSize, font, z)
     })
     holder.Parent = parent
 
-    local layers = {
-        {Vector2.new(0, 0), 0, App.Theme.Text},
-        {Vector2.new(0, 0), 0.18, App.Theme.Accent},
-        {Vector2.new(1, 0), 0.78, App.Theme.Accent},
-        {Vector2.new(-1, 0), 0.78, App.Theme.Accent},
-        {Vector2.new(0, 1), 0.78, App.Theme.Accent},
-        {Vector2.new(0, -1), 0.78, App.Theme.Accent},
-        {Vector2.new(2, 0), 0.9, App.Theme.Accent},
-        {Vector2.new(-2, 0), 0.9, App.Theme.Accent},
-        {Vector2.new(0, 2), 0.9, App.Theme.Accent},
-        {Vector2.new(0, -2), 0.9, App.Theme.Accent}
-    }
+    local base = create("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, 0),
+        Size = UDim2.new(1,0,1,0),
+        Text = text,
+        Font = font,
+        TextSize = textSize,
+        TextTransparency = 0,
+        TextColor3 = App.Theme.Text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = z or 5
+    })
+    base.Parent = holder
 
-    for _, entry in ipairs(layers) do
-        local off, trans, color = entry[1], entry[2], entry[3]
-        local glow = create("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.new(0, off.X, 0, off.Y),
-            Size = UDim2.new(1,0,1,0),
-            Text = text,
-            Font = font,
-            TextSize = textSize,
-            TextTransparency = trans,
-            TextColor3 = color,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Center,
-            ZIndex = z or 5
-        })
-        glow.Parent = holder
-    end
+    local soft = create("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 1, 0, 1),
+        Size = UDim2.new(1,0,1,0),
+        Text = text,
+        Font = font,
+        TextSize = textSize,
+        TextTransparency = 0.82,
+        TextColor3 = App.Theme.Accent,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = (z or 5) - 1
+    })
+    soft.Parent = holder
     return holder
 end
 
@@ -1234,6 +1233,10 @@ local function switchTab(name)
         btn.BackgroundColor3 = (n == name) and App.Theme.Panel2 or App.Theme.Panel
     end
     if App.PageTitle then App.PageTitle.Text = name end
+    if name == "Perf" and not App.PerfInitialized then
+        App.PerfInitialized = true
+        task.defer(refreshLobbyCards)
+    end
 end
 
 local function makePage(name)
@@ -2291,13 +2294,8 @@ local function buildUI()
     App.PopupBlocker = create("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0)})
     App.PopupBlocker.Parent = App.Gui
 
-    App.Intro = create("Frame", {BackgroundColor3 = Color3.fromRGB(0,0,0), BorderSizePixel=0, Size=UDim2.new(1,0,1,0), ZIndex=200})
+    App.Intro = create("Frame", {BackgroundColor3 = Color3.fromRGB(0,0,0), BorderSizePixel=0, Size=UDim2.new(1,0,1,0), ZIndex=200, BackgroundTransparency=1})
     App.Intro.Parent = App.Gui
-    local introGlow = createGlowText(App.Intro, "Nexhidera", UDim2.new(0.5,-220,0.5,-50), UDim2.new(0,440,0,80), 62, Enum.Font.GothamBlack, 201)
-    introGlow.AnchorPoint = Vector2.new(0,0)
-    for _, child in ipairs(introGlow:GetChildren()) do
-        if child:IsA("TextLabel") then child.TextXAlignment = Enum.TextXAlignment.Center end
-    end
 
     App.Root = create("Frame", {
         BackgroundTransparency = 0,
@@ -2465,7 +2463,6 @@ refreshLobbyCards = function()
     end
 
     local playersList = Players:GetPlayers()
-    table.sort(playersList, function(a, b) return string.lower(a.DisplayName) < string.lower(b.DisplayName) end)
 
     for order, plr in ipairs(playersList) do
         local card = create("Frame", {BackgroundTransparency=0, BorderSizePixel=0, LayoutOrder=order})
@@ -2479,18 +2476,20 @@ refreshLobbyCards = function()
         registerTheme(avatar, "BackgroundColor3", "Main")
         addCorner(avatar, 22)
         addStroke(avatar)
-        if not App.ThumbCache[plr.UserId] then
-            task.spawn(function()
-                local ok, image = pcall(function()
-                    return Players:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+        if order <= 8 then
+            if not App.ThumbCache[plr.UserId] then
+                task.spawn(function()
+                    local ok, image = pcall(function()
+                        return Players:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+                    end)
+                    if ok then
+                        App.ThumbCache[plr.UserId] = image
+                        if avatar.Parent then avatar.Image = image end
+                    end
                 end)
-                if ok then
-                    App.ThumbCache[plr.UserId] = image
-                    if avatar.Parent then avatar.Image = image end
-                end
-            end)
-        else
-            avatar.Image = App.ThumbCache[plr.UserId]
+            else
+                avatar.Image = App.ThumbCache[plr.UserId]
+            end
         end
 
         local name = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,62,0,10), Size=UDim2.new(1,-72,0,16), Text=plr.DisplayName, Font=Enum.Font.GothamBold, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
@@ -2501,15 +2500,11 @@ refreshLobbyCards = function()
         user.Parent = card
         registerTheme(user, "TextColor3", "Sub")
 
-        local age = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,62), Size=UDim2.new(1,-20,0,14), Text='Days: ' .. tostring(plr.AccountAge), Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
-        age.Parent = card
-        registerTheme(age, "TextColor3", "Sub")
-
         local distText = "Distance: --"
         if plr.Character and getRoot(plr.Character) then
             distText = 'Distance: ' .. tostring(math.floor(distanceTo(getRoot(plr.Character).Position)))
         end
-        local dist = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,76), Size=UDim2.new(1,-20,0,14), Text=distText, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+        local dist = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,10,0,62), Size=UDim2.new(1,-20,0,14), Text=distText, Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
         dist.Parent = card
         registerTheme(dist, "TextColor3", "Sub")
 
@@ -2531,235 +2526,11 @@ refreshLobbyCards = function()
         addStroke(btn)
         btn.MouseButton1Click:Connect(function()
             local hum = plr.Character and getHumanoid(plr.Character)
-            if hum then
-                Camera.CameraSubject = hum
-                notify("Perf", "Ahora mirando a " .. plr.DisplayName)
-            end
+            if hum then Camera.CameraSubject = hum end
         end)
     end
 end
 
-local function buildPages()
-    local main = makePage("Main")
-    local visual = makePage("Visual")
-    local combat = makePage("Combat")
-    local perf = makePage("Perf")
-    local settings = makePage("Settings")
-
-    local homeTools = createSection(main, "Overview / Presets", "Presets rápidos, estado en vivo y mejoras del render")
-    createButton(homeTools, "Preset Low", "Menos carga para lobbys llenos", "Low", function()
-        applyVisualPreset("Low")
-        notify("Preset", "Modo Low aplicado.")
-    end)
-    createButton(homeTools, "Preset Balanced", "Buen equilibrio entre look y FPS", "Balanced", function()
-        applyVisualPreset("Balanced")
-        notify("Preset", "Modo Balanced aplicado.")
-    end)
-    createButton(homeTools, "Preset Quality", "Más calidad visual manteniendo fluidez", "Quality", function()
-        applyVisualPreset("Quality")
-        notify("Preset", "Modo Quality aplicado.")
-    end)
-    local liveStats = controlHolder(homeTools, 92)
-    local fpsLabel = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,10), Size=UDim2.new(1,-24,0,16), Text="FPS: --", Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
-    fpsLabel.Parent = liveStats
-    registerTheme(fpsLabel, "TextColor3", "Text")
-    local tgtLabel = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,30), Size=UDim2.new(1,-24,0,16), Text="Targets: 0", Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
-    tgtLabel.Parent = liveStats
-    registerTheme(tgtLabel, "TextColor3", "Sub")
-    local modeLabel = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,50), Size=UDim2.new(1,-24,0,16), Text="Aim: OFF", Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
-    modeLabel.Parent = liveStats
-    registerTheme(modeLabel, "TextColor3", "Sub")
-    local renderLabel = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,68), Size=UDim2.new(1,-24,0,16), Text="Render Budget: --", Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
-    renderLabel.Parent = liveStats
-    registerTheme(renderLabel, "TextColor3", "Sub")
-    App.HomeStats.FPS = fpsLabel
-    App.HomeStats.Targets = tgtLabel
-    App.HomeStats.Aim = modeLabel
-    App.HomeStats.Render = renderLabel
-
-    local vis = createSection(visual, "ESP", "Visual options start disabled and you activate what you want")
-    bindControl("ESPEnabled", createToggle(vis, "Enable ESP", "Master toggle for the ESP system", false, function(v) State.ESPEnabled = v end))
-    bindControl("ESPPlayers", createToggle(vis, "Players", "Show ESP for players", false, function(v) State.ESPPlayers = v end))
-    bindControl("ESPNPCs", createToggle(vis, "NPCs", "Show ESP for NPCs with humanoid", false, function(v) State.ESPNPCs = v end))
-    bindControl("ESPDistance", createSlider(vis, "Max Distance", "How far the ESP can render", 50, 2000, 500, 10, function(v) State.ESPDistance = v end))
-    bindControl("ESPColor", createColorPicker(vis, "ESP Color", "Open a palette menu and pick a color", State.ESPColor, function(c) State.ESPColor = c end))
-    bindControl("ESPStyle", createDropdown(vis, "ESP Style", "Choose between normal box or corner", {"Box", "Corner"}, State.ESPStyle, function(v) State.ESPStyle = v end))
-    bindControl("Tracers", createToggle(vis, "ESP Lines", "Draw tracers to the head", false, function(v) State.Tracers = v end))
-    bindControl("TracerOrigin", createDropdown(vis, "Lines Origin", "Target-style menu for top, center or bottom", {"Top", "Center", "Bottom"}, State.TracerOrigin, function(v) State.TracerOrigin = v end))
-    bindControl("HealthBar", createToggle(vis, "Health Bar", "Show health bar on the box", false, function(v) State.HealthBar = v end))
-    bindControl("HealthBarSide", createDropdown(vis, "Health Position", "Choose left, right, top or bottom", {"Left", "Right", "Top", "Bottom"}, State.HealthBarSide, function(v) State.HealthBarSide = v end))
-    bindControl("HealthBarThickness", createSlider(vis, "Health Thickness", "Adjust the thickness of the health bar", 1, 12, State.HealthBarThickness, 1, function(v) State.HealthBarThickness = v end))
-    bindControl("Skeleton", createToggle(vis, "Skeleton", "Draw a skeleton with a head circle", false, function(v) State.Skeleton = v end))
-    bindControl("SkeletonType", createDropdown(vis, "Skeleton Type", "Choose the current or normal skeleton", {"Current", "Normal"}, State.SkeletonType, function(v) State.SkeletonType = v end))
-    bindControl("SkeletonThickness", createSlider(vis, "Skeleton Thickness", "Adjust the skeleton thickness", 1, 8, State.SkeletonThickness, 0.1, function(v) State.SkeletonThickness = v end))
-    bindControl("ESPNames", createToggle(vis, "Names", "Show names above the ESP", false, function(v) State.ESPNames = v end))
-    bindControl("ESPNameSize", createSlider(vis, "Text Size", "Adjust the name text size", 10, 28, State.ESPNameSize, 1, function(v) State.ESPNameSize = v end))
-    bindControl("ESPGlow", createToggle(vis, "Glow", "Enable glow effect for ESP, skeleton and health", false, function(v) State.ESPGlow = v end))
-    bindControl("CharacterPreview", createToggle(vis, "Character Window", "Show a right-side window with your character", false, function(v)
-        State.CharacterPreview = v
-        rebuildPreview()
-        refreshMenuState()
-    end))
-    local visFlow = createSection(visual, "Pegado / Suavizado", "Ahora las ESP van pegadas al cuerpo. Si activas esto, solo suaviza un poco el tamaño")
-    bindControl("ESPFluid", createToggle(visFlow, "Soft Follow", "Suaviza un poco el tamaño del box, pero sin retrasar la posición sobre el enemigo", State.ESPFluid, function(v) State.ESPFluid = v end))
-    bindControl("ESPFluidness", createSlider(visFlow, "Soft Strength", "Más alto = más suavizado del tamaño", 0.08, 0.85, State.ESPFluidness, 0.01, function(v) State.ESPFluidness = v end))
-    createParagraph(visFlow, "Mejorado", "Las ESP ya no retrasan su posición al girar la cámara. Ahora el seguimiento es instantáneo y el suavizado solo toca el tamaño si tú lo activas.")
-
-    local perfMain = createSection(visual, "Render / Limits", "Toda la configuración de ESP quedó aquí para que no tengas que ir a Perf")
-    bindControl("RenderPriority", createDropdown(perfMain, "Priority", "Orden para render y selección de aim", {"Crosshair", "Distance", "Health", "Visible"}, State.RenderPriority, function(v) State.RenderPriority = v end))
-    bindControl("MaxRenderedTargets", createSlider(perfMain, "Max ESP Targets", "Cuántos objetivos completos se renderizan", 2, 30, State.MaxRenderedTargets, 1, function(v) State.MaxRenderedTargets = v end))
-    bindControl("MaxSkeletonTargets", createSlider(perfMain, "Max Skeleton Targets", "Skeleton solo para los más importantes", 0, 15, State.MaxSkeletonTargets, 1, function(v) State.MaxSkeletonTargets = v end))
-    bindControl("MaxTracerTargets", createSlider(perfMain, "Max Tracer Targets", "Líneas solo para los primeros", 0, 20, State.MaxTracerTargets, 1, function(v) State.MaxTracerTargets = v end))
-    bindControl("MaxNameTargets", createSlider(perfMain, "Max Name Targets", "Textos solo para los primeros", 0, 20, State.MaxNameTargets, 1, function(v) State.MaxNameTargets = v end))
-    bindControl("TargetRefreshRate", createSlider(perfMain, "Refresh Rate", "Cada cuánto se recalcula la lista completa", 0.03, 0.25, State.TargetRefreshRate, 0.01, function(v) State.TargetRefreshRate = v end))
-    createParagraph(perfMain, "Tip", "El glow se mantiene, pero ahora el pegado al enemigo se actualiza cada frame. Los límites de skeleton, tracer y texto siguen aquí para no matar FPS.")
-    bindControl("DynamicQuality", createToggle(perfMain, "Dynamic Quality", "Baja distancias y glow automáticamente cuando hay mucha gente", State.DynamicQuality, function(v) State.DynamicQuality = v end))
-    bindControl("OnlyScreenTargets", createToggle(perfMain, "Only On Screen", "Prioriza solo targets visibles en pantalla", State.OnlyScreenTargets, function(v) State.OnlyScreenTargets = v end))
-    bindControl("GlowDistance", createSlider(perfMain, "Glow Distance", "Hasta dónde llega el glow de ESP", 80, 600, State.GlowDistance, 10, function(v) State.GlowDistance = v end))
-    bindControl("SkeletonDistance", createSlider(perfMain, "Skeleton Distance", "Hasta dónde se permite skeleton", 80, 600, State.SkeletonDistance, 10, function(v) State.SkeletonDistance = v end))
-    bindControl("TracerDistance", createSlider(perfMain, "Tracer Distance", "Hasta dónde se permiten líneas", 80, 900, State.TracerDistance, 10, function(v) State.TracerDistance = v end))
-    bindControl("HealthDistance", createSlider(perfMain, "Health Distance", "Hasta dónde se ve la barra de vida", 80, 900, State.HealthDistance, 10, function(v) State.HealthDistance = v end))
-    bindControl("NameDistance", createSlider(perfMain, "Name Distance", "Hasta dónde se ven los nombres", 80, 700, State.NameDistance, 10, function(v) State.NameDistance = v end))
-    createButton(perfMain, "Preset Low", "Aplicar preset liviano", "Low", function()
-        applyVisualPreset("Low")
-        notify("Perf", "Preset Low aplicado.")
-    end)
-    createButton(perfMain, "Preset Balanced", "Aplicar preset equilibrado", "Balanced", function()
-        applyVisualPreset("Balanced")
-        notify("Perf", "Preset Balanced aplicado.")
-    end)
-    createButton(perfMain, "Preset Quality", "Aplicar preset de calidad", "Quality", function()
-        applyVisualPreset("Quality")
-        notify("Perf", "Preset Quality aplicado.")
-    end)
-
-    local profile = createSection(perf, "Profile", "Tu perfil de Roblox y tu avatar en el tab Perf")
-    local accountCard = controlHolder(profile, 108)
-    local avatar = create("ImageLabel", {BackgroundTransparency=0, BorderSizePixel=0, Position=UDim2.new(0,12,0,12), Size=UDim2.new(0,78,0,78), Image=""})
-    avatar.Parent = accountCard
-    registerTheme(avatar, "BackgroundColor3", "Main")
-    addCorner(avatar, 18)
-    addStroke(avatar)
-    task.spawn(function()
-        local ok, image = pcall(function()
-            return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.AvatarThumbnail, Enum.ThumbnailSize.Size420x420)
-        end)
-        if ok and avatar.Parent then
-            avatar.Image = image
-        end
-    end)
-    local profileName = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,14), Size=UDim2.new(1,-114,0,18), Text=LocalPlayer.DisplayName, Font=Enum.Font.GothamBold, TextSize=15, TextXAlignment=Enum.TextXAlignment.Left})
-    profileName.Parent = accountCard
-    registerTheme(profileName, "TextColor3", "Text")
-    local profileUser = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,34), Size=UDim2.new(1,-114,0,16), Text='@' .. LocalPlayer.Name, Font=Enum.Font.Gotham, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
-    profileUser.Parent = accountCard
-    registerTheme(profileUser, "TextColor3", "Sub")
-    local profileInfo = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,54), Size=UDim2.new(1,-114,0,16), Text='Days: ' .. tostring(LocalPlayer.AccountAge) .. '  |  UserId: ' .. tostring(LocalPlayer.UserId), Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
-    profileInfo.Parent = accountCard
-    registerTheme(profileInfo, "TextColor3", "Sub")
-    local profileNote = create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,102,0,72), Size=UDim2.new(1,-114,0,16), Text='Avatar preview + live character window on the right.', Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
-    profileNote.Parent = accountCard
-    registerTheme(profileNote, "TextColor3", "Sub")
-    createParagraph(profile, "Player", "DisplayName: " .. LocalPlayer.DisplayName .. "   |   Username: @" .. LocalPlayer.Name)
-    createParagraph(profile, "Account", "AccountAge: " .. tostring(LocalPlayer.AccountAge) .. " days   |   UserId: " .. tostring(LocalPlayer.UserId))
-    createParagraph(profile, "Menu", "Movible, minimizable, closable, hotkey hide, preview window, color menu and glow title enabled.")
-    createButton(profile, "Refresh preview", "Rebuild the character window at the right side", "Refresh", function()
-        rebuildPreview()
-        notify("Preview", "Character preview refreshed.")
-    end)
-
-
-
-    local cbt = createSection(combat, "Combat / Aim", "Opciones más útiles y mejores defaults")
-bindControl("CombatEnabled", createToggle(cbt, "Enable Combat", "Master toggle for this tab", false, function(v)
-    State.CombatEnabled = v
-    if not v then State.AimActive = false end
-    refreshMenuState()
-end))
-bindControl("ShowFOV", createToggle(cbt, "Show FOV", "Show the FOV circle", false, function(v) State.ShowFOV = v; updateFOV() end))
-bindControl("FOV", createSlider(cbt, "FOV Size", "Range from 0 to 500", 0, 500, State.FOV, 1, function(v) State.FOV = v; updateFOV() end))
-bindControl("Smooth", createSlider(cbt, "Smooth", "Range from 0 to 10", 0, 10, State.Smooth, 0.1, function(v) State.Smooth = v end))
-bindControl("AimKey", createKeybind(cbt, "Aim Key", "Keyboard or mouse button", State.AimKey, function(v) State.AimKey = v; refreshMenuState() end))
-bindControl("AimMode", createDropdown(cbt, "Aim Mode", "Toggle or hold with the same key", {"Toggle", "Hold"}, State.AimMode, function(v)
-    State.AimMode = v
-    if v ~= "Toggle" then
-        State.AimActive = false
-        App.CurrentAimTarget = nil
-        refreshMenuState()
-    end
-end))
-bindControl("AimPart", createDropdown(cbt, "Aim Part", "Choose head, chest or root", {"Head", "Chest", "HumanoidRootPart"}, State.AimPart, function(v) State.AimPart = v end))
-bindControl("AimPriority", createDropdown(cbt, "Aim Priority", "How the aim chooses the best target", {"Crosshair", "Distance", "Health", "Visible"}, State.AimPriority, function(v) State.AimPriority = v end))
-bindControl("AimDistance", createSlider(cbt, "Aim Distance", "Maximum world distance for lock", 50, 2000, State.AimDistance, 10, function(v) State.AimDistance = v end))
-bindControl("LockTarget", createToggle(cbt, "Lock Target", "Keep the same target while it stays valid", State.LockTarget, function(v)
-    State.LockTarget = v
-    if not v then App.CurrentAimTarget = nil end
-end))
-bindControl("AimRequireFOV", createToggle(cbt, "Require FOV", "Only use targets inside the circle", State.AimRequireFOV, function(v)
-    State.AimRequireFOV = v
-end))
-bindControl("AimDeadzone", createSlider(cbt, "Deadzone", "Ignore tiny center movements", 0, 40, State.AimDeadzone, 1, function(v)
-    State.AimDeadzone = v
-end))
-bindControl("RetargetDelay", createSlider(cbt, "Retarget Delay", "How long before jumping to a new target", 0, 0.5, State.RetargetDelay, 0.01, function(v)
-    State.RetargetDelay = v
-end))
-bindControl("AimStickyStrength", createSlider(cbt, "Sticky Strength", "Más alto = se pega más duro al target", 0, 10, State.AimStickyStrength, 0.1, function(v)
-    State.AimStickyStrength = v
-end))
-bindControl("AimPrediction", createSlider(cbt, "Prediction", "Pequeña predicción para targets en movimiento", 0, 0.20, State.AimPrediction, 0.01, function(v)
-    State.AimPrediction = v
-end))
-bindControl("WallCheck", createToggle(cbt, "Wall Check", "No pegar a través de paredes", false, function(v) State.WallCheck = v end))
-createParagraph(cbt, "Aim Status", "Para que se pegue más: Smooth bajo, Sticky alto, Lock Target ON y Priority en Crosshair o Distance.")
-
-    local perfLobby = createSection(perf, "Lobby", "Todos los jugadores del lobby ordenados por fila con su logo de Roblox")
-    createButton(perfLobby, "Return Camera", "Vuelve la cámara a tu personaje", "Self", function()
-        local hum = getHumanoid(getCharacter())
-        if hum then
-            Camera.CameraSubject = hum
-            notify("Perf", "Cámara vuelta a tu personaje.")
-        end
-    end)
-    createButton(perfLobby, "Refresh Lobby", "Actualiza las cards del lobby", "Refresh", function()
-        refreshLobbyCards()
-    end)
-    App.LobbyGrid = create("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,0), AutomaticSize=Enum.AutomaticSize.Y})
-    App.LobbyGrid.Parent = perfLobby
-    local gridLayout = create("UIGridLayout", {CellSize=UDim2.new(0,178,0,112), CellPadding=UDim2.new(0,8,0,8), SortOrder=Enum.SortOrder.LayoutOrder})
-    gridLayout.Parent = App.LobbyGrid
-
-    local set = createSection(settings, "Settings", "Hotkey, color menu y configs")
-    bindControl("MenuColor", createColorPicker(set, "Menu Color", "Change the menu tint, glow and accent color", State.MenuColor, function(c)
-        State.MenuColor = c
-        rebuildThemeColors()
-    end))
-    bindControl("MenuTextColor", createColorPicker(set, "Text Color", "Change the text color of the menu", State.MenuTextColor, function(c)
-        State.MenuTextColor = c
-        rebuildThemeColors()
-    end))
-    bindControl("MenuKey", createKeybind(set, "Menu Hotkey", "Choose the key to hide and show the menu", State.MenuKey, function(v) State.MenuKey = v; refreshMenuState() end))
-    createParagraph(set, "How to save", "1) Write a name in Save Config.  2) Press Save.  3) Choose that same name in Select Config.  4) Press Load when you want to bring it back.")
-    bindControl("ConfigName", createTextbox(set, "Save Config", "Escribe el nombre antes de guardar", State.ConfigName, "default", function(v) State.ConfigName = v end))
-    bindControl("SelectedConfig", createDropdown(set, "Select Config", "Elige una config guardada", listConfigNames(), State.SelectedConfig, function(v) State.SelectedConfig = v end))
-    createButton(set, "Save Config", "Guarda la config actual en archivo json", "Save", function()
-        local saved = saveCurrentConfig(State.ConfigName)
-        if saved then
-            refreshConfigDropdown(saved)
-            notify("Config", "Config guardada: " .. tostring(saved))
-        end
-    end)
-    createButton(set, "Load Config", "Carga la config seleccionada", "Load", function()
-        local loaded = loadSavedConfig(State.SelectedConfig)
-        if loaded then
-            refreshConfigDropdown(loaded)
-            notify("Config", "Config cargada: " .. tostring(loaded))
-        end
-    end)
-    createButton(set, "Refresh Configs", "Actualiza la lista de configs del disco", "Refresh", function()
-        refreshConfigDropdown(State.SelectedConfig)
-        notify("Config", "Lista de configs actualizada.")
-    end)
 end
 
 local function hookDrag()
@@ -2878,36 +2649,142 @@ local function startLoop()
     local fpsTick = 0
     local fpsFrames = 0
     table.insert(App.Connections, RunService.RenderStepped:Connect(function(dt)
-        targetTick += dt
-        espTick += dt
-        lobbyTick += dt
         fpsTick += dt
         fpsFrames += 1
 
-        local targetInterval = State.TargetRefreshRate
-        if State.AimActive and App.CurrentAimTarget then
-            targetInterval = math.min(targetInterval, 0.03)
+        local menuVisible = State.MenuVisible and not State.Minimized
+        local needsCombat = State.CombatEnabled and (State.AimActive or State.ShowFOV)
+        local needsESP = State.ESPEnabled
+        local needsPerf = menuVisible and App.Pages and App.Pages["Perf"] and App.Pages["Perf"].Visible
+        local needsHomeStats = menuVisible and App.Pages and App.Pages["Main"] and App.Pages["Main"].Visible
+
+        if not needsESP and not needsCombat and not needsPerf and not needsHomeStats then
+            if next(App.ESP) ~= nil then
+                for target, rec in pairs(App.ESP) do
+                    hideRecord(rec)
+                end
+            end
+            if fpsTick >= 0.75 then
+                fpsFrames = 0
+                fpsTick = 0
+            end
+            if State.ShowFOV ~= true and App.FOVCircle and App.FOVCircle.Visible then
+                App.FOVCircle.Visible = false
+            end
+            return
         end
 
-        if targetTick >= targetInterval then
-            targetTick = 0
-            refreshTargetCache()
-        end
+        targetTick += dt
+        espTick += dt
+        lobbyTick += dt
 
         local count = #App.TargetCache
-        local espInterval = 0.02
-        if State.DynamicQuality then
-            if count >= 12 then
-                espInterval = 0.04
-            elseif count >= 8 then
-                espInterval = 0.032
-            elseif count >= 4 then
-                espInterval = 0.025
+        if needsESP or (State.CombatEnabled and State.AimActive) then
+            local targetInterval = State.TargetRefreshRate
+            if State.AimActive and App.CurrentAimTarget then
+                targetInterval = math.min(targetInterval, 0.05)
             end
-        else
-            if count >= 12 then
-                espInterval = 0.03
-            elseif count >= 8 then
-                espInterval = 0.025
+            if targetTick >= targetInterval then
+                targetTick = 0
+                refreshTargetCache()
+                count = #App.TargetCache
             end
         end
+
+        local espInterval = 0.05
+        if State.DynamicQuality then
+            if count >= 10 then
+                espInterval = 0.08
+            elseif count >= 6 then
+                espInterval = 0.065
+            elseif count >= 3 then
+                espInterval = 0.055
+            end
+        else
+            if count >= 10 then
+                espInterval = 0.065
+            elseif count >= 6 then
+                espInterval = 0.055
+            end
+        end
+
+        if State.ESPEnabled then
+            local immediateMode = isFirstPersonOrControl() or (State.AimActive and App.CurrentAimTarget ~= nil)
+            local minInterval = immediateMode and math.min(espInterval, 0.035) or espInterval
+            if espTick >= minInterval then
+                espTick = 0
+                updateESP()
+            elseif State.AimActive and App.CurrentAimTarget and App.CurrentAimTarget.Parent then
+                renderTargetESP(App.CurrentAimTarget.Parent, 1, math.max(count, 1), App.CurrentAimTarget.Parent, nil)
+            end
+        else
+            if next(App.ESP) ~= nil then
+                for target, rec in pairs(App.ESP) do
+                    hideRecord(rec)
+                end
+            end
+        end
+
+        if State.CombatEnabled and State.AimActive then
+            updateAim()
+        end
+        if State.ShowFOV then
+            updateFOV()
+        elseif App.FOVCircle and App.FOVCircle.Visible then
+            App.FOVCircle.Visible = false
+        end
+
+        if needsHomeStats and fpsTick >= 0.75 then
+            local fps = math.floor(fpsFrames / fpsTick + 0.5)
+            fpsFrames = 0
+            fpsTick = 0
+            if App.HomeStats and App.HomeStats.FPS then
+                App.HomeStats.FPS.Text = "FPS: " .. tostring(fps)
+                App.HomeStats.Targets.Text = "Targets: " .. tostring(#App.TargetCache)
+                App.HomeStats.Aim.Text = "Aim: " .. (State.AimActive and "ON" or "OFF") .. "  |  Mode: " .. tostring(State.AimMode)
+                App.HomeStats.Render.Text = "Render Budget: " .. tostring(State.MaxRenderedTargets) .. " / Skeleton " .. tostring(State.MaxSkeletonTargets)
+            end
+        elseif fpsTick >= 1.0 and not needsHomeStats then
+            fpsFrames = 0
+            fpsTick = 0
+        end
+
+        if needsPerf and lobbyTick >= 8.0 then
+            lobbyTick = 0
+            refreshLobbyCards()
+        end
+    end))
+    table.insert(App.Connections, LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(0.8)
+        App.CurrentAimTarget = nil
+        rebuildPreview()
+    end))
+    table.insert(App.Connections, Players.PlayerAdded:Connect(function()
+        task.wait(0.25)
+        if App.Pages and App.Pages["Perf"] and App.Pages["Perf"].Visible then refreshLobbyCards() end
+    end))
+    table.insert(App.Connections, Players.PlayerRemoving:Connect(function()
+        task.wait()
+        if App.Pages and App.Pages["Perf"] and App.Pages["Perf"].Visible then refreshLobbyCards() end
+    end))
+end
+
+buildUI()
+buildPages()
+refreshConfigDropdown(State.SelectedConfig)
+switchTab("Main")
+hookDrag()
+hookButtons()
+startLoop()
+
+App.Root.Visible = false
+App.PreviewWindow.Visible = false
+updateFOV()
+
+task.defer(function()
+    if App.Intro and App.Intro.Parent then App.Intro:Destroy() end
+    State.MenuVisible = true
+    refreshMenuState()
+    App.Root.Visible = true
+end)
+
