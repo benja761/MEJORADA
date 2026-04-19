@@ -2787,4 +2787,3 @@ task.defer(function()
     refreshMenuState()
     App.Root.Visible = true
 end)
-
